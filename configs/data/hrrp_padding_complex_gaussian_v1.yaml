@@ -1,0 +1,83 @@
+schema_version: 1
+preprocessing_id: hrrp_padding_complex_gaussian_v1
+
+input:
+  dataset_id: hrrp_10class_theta83_hh_v1
+  manifest_sha256: 2ce908e24b68dcd7524e7f1544f97f3761d4955f2d64d8cfe05aafc090d77724
+  profile_field: TrcsHH
+  representation: power_decibel
+  db_definition: 10_log10_power
+  db_to_linear_power: 10 ** (x_db / 10)
+  evidence: >-
+    HRRPprocessV1.m computes 4*pi*abs(ifft(...))^2 and then applies
+    10*log10. Recomputing TrcsHH from Ep for all ten classes at theta=83
+    and integer phi=0..359 reproduces the stored profiles with a global
+    maximum absolute error below 6.0e-10 dB when the data's 1.8 coefficient
+    is used.
+
+target_grid:
+  length: 601
+  range_min: -180.0
+  range_max: 180.0
+  range_step: 0.6
+  placement: centered_on_RangeX_zero
+
+noise:
+  method: complex_gaussian_amplitude_to_power
+  algorithm_version: complex_gaussian_fixed_mean_power_v1
+  base_seed: 20260810
+  mean_power_db: -140.0
+  mean_power_linear: 1.0e-14
+  description: >-
+    Draw independent zero-mean unit-variance complex Gaussian amplitude
+    samples and convert them to nonnegative power with abs(z)^2. Use a fixed
+    expected noise power of 1e-14 (-140 dB relative to the same implicit unity
+    reference as TrcsHH), independently of the source profile's energy. Convert
+    padding power back with 10*log10 before concatenating it to the unchanged
+    source dB values.
+
+parameter_selection:
+  source_split: known_train_only
+  known_train_value_count: 779112
+  known_train_min_db_at_freeze: -130.16270604409567
+  fixed_noise_mean_margin_below_min_db: 9.83729395590433
+  unknown_validation_and_test_used: false
+  rationale: >-
+    A preliminary -60 dB total padding-to-profile power ratio was rejected
+    because strong HRRP peaks produced padding values as high as +0.19 dB and
+    profile-dependent noise levels. The fixed -140 dB mean lies about 10 dB
+    below the minimum observed known-training bin and does not encode source
+    profile energy.
+
+risk_acceptance:
+  risk_id: profile_length_role_shortcut_v1
+  status: accepted_for_first_round
+  accepted_by: user
+  accepted_on: "2026-08-10"
+  treatment: document_and_continue
+  statement: >-
+    The original profile-length sets are disjoint between known and unknown
+    classes, so a model may infer the open-set role from a detectable padding
+    boundary. The user explicitly accepted this as a documented limitation for
+    the first-round experiment and requested that preprocessing continue.
+
+output:
+  format: numpy_npy
+  dtype: float64
+  profile_file: profiles.npy
+  manifest_file: samples.csv
+  row_order: input_manifest_order
+
+randomness:
+  derivation: sha256_algorithm_version_base_seed_sample_id_first_u64_le
+  independent_per_sample: true
+  global_rng_state_forbidden: true
+
+invariants:
+  preserve_original_bins_exactly: true
+  never_write_into_raw_data: true
+  padding_mask_not_exposed_to_model: true
+  unknown_and_test_not_used_to_select_parameters: true
+  raw_manifest_remains_unmodified: true
+  formal_training_requires_mechanical_audit_status_passed: true
+  accepted_risks_do_not_change_angle_or_split_protocol: true

@@ -1,0 +1,61 @@
+schema_version: 1
+experiment_id: b1_main_v1
+stage: P1
+baseline: B1
+run_kind: main
+result_scope: main_v3
+
+data:
+  dataset_id: hrrp_10class_theta83_hh_v1
+  bundle_root_env: HRRP_PROCESSED_ROOT
+  profiles_sha256: 2dd92282c125f0f677cf1f2dfce828781c8ba4385cf9ae552c4a2c56033c3f5b
+  processed_manifest_sha256: 748b9f30629c3b3cbe66c6a1dac30863fdab2d81a214e46d8bc3ef7c6022a08a
+  bundle_sha256: 79176091b5b745e5df5957f1bb4ade7304c1403a4a32e64622e012db67d5a0c5
+  accepted_risk_id: profile_length_role_shortcut_v1
+  accepted_risk_status: accepted_for_first_round
+
+classes:
+  known_order: [CVN77, DDG-1000, DDG-112, 油气轮MARVEL CRANE, 爱达魔都号, 迷你好望角型散货船, 集装箱船达飞罗尔多夫级]
+  unknown_label: 7
+
+set_protocol:
+  view_count: 3
+  distinct_domains: true
+  set_algorithm_version: v3_disjoint_domain_partition_v1
+  set_seed: 20260810
+  set_repeat: 0
+  random_input_order: true
+  angle_or_position_inputs: false
+
+checkpoint_reuse:
+  source_baseline: B0
+  source_root_argument: b0_root
+  training_allowed: false
+  seeds: [20260810, 20260820, 20260830, 20260840, 20260850]
+  checkpoint_sha256:
+    "20260810": 63feef878372f833c8bc86e8ded6c4cd67f17be7c0cb720a1cf58324fee2268a
+    "20260820": 02c5fdf7cb931ec4ce90cbd3deedfe29543d3688f13bbd5e705b5709ce1f2529
+    "20260830": cbc2ba19cd372cd8618546ffe6306b9649e4003cd9a3a3586ec7fb22002a707b
+    "20260840": 4c222528f0433ca2ce52294415c172b8f527bb65f185c6b59cf8a692aafe6245
+    "20260850": dbc2a1c221c867a3e65b160b5633216d971d7b535eb7156036bfa0fed59c9bcd
+
+fusion:
+  msp: mean_per_view_known_posterior_then_msp
+  energy: mean_per_view_energy_score
+  mean_logits_before_energy: false
+
+evaluation:
+  unknown_score_direction: larger_is_more_unknown
+  energy_temperature: 1.0
+  threshold_source: known_validation_only
+  threshold_known_acceptance_rate: 0.95
+  permutation_audit_all_v3_permutations: true
+  permutation_atol: 1.0e-12
+
+artifact_policy:
+  fail_if_output_nonempty: true
+  save_predictions: true
+  save_set_manifest: true
+  save_checkpoint_reference: true
+  save_environment: true
+  save_artifact_hashes: true

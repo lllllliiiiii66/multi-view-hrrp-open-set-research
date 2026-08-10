@@ -1,0 +1,64 @@
+schema_version: 1
+dataset_id: hrrp_10class_theta83_hh_v1
+
+source:
+  root_env: HRRP_RAW_ROOT
+  layout: one_mat_file_per_class
+  file_glob: "*.mat"
+  mat_variable: merged
+  angle_field: phi
+  elevation_field: theta
+  profile_field: TrcsHH
+  range_field: RangeX
+  nfreq_field: Nfreq
+
+selection:
+  elevation_deg: 83.0
+  angle_start_deg: 0
+  angle_stop_deg: 359
+  angle_step_deg: 1
+  angle_tolerance: 1.0e-8
+
+expected:
+  class_count: 10
+  samples_per_class: 360
+  profile_representation: decibel
+  profile_representation_evidence: >-
+    HRRPprocessV1.m computes 4*pi*abs(ifft(...))^2 and then applies 10*log10.
+    Recomputing TrcsHH from Ep for all ten classes at theta=83 and integer
+    phi=0..359 reproduces the stored values with a global maximum absolute
+    error below 6.0e-10 dB when the data's 1.8 coefficient is used. Therefore
+    TrcsHH is power dB and linear power is 10**(x_db/10). The script's 1.852
+    coefficient differs from the stored data by a constant 0.2473695 dB.
+  profile_linearization: 10_log10_power
+
+class_partition:
+  method: stable_hash_rank
+  algorithm_version: sha256_rank_v1
+  seed: 20260810
+  known_count: 7
+  unknown_count: 3
+
+protocol:
+  domain_count: 6
+  domain_width_deg: 60
+  train_width_deg: 36
+  validation_width_deg: 12
+  test_width_deg: 12
+  rotate_split_position: false
+  boundary_buffer_deg: 0
+
+preprocessing:
+  manifest_uses_raw_profiles: true
+  padding:
+    enabled: false
+    status: raw_manifest_unmodified_padding_specified_separately
+    experiment_readiness: passed_with_accepted_profile_length_role_risk
+    versioned_config: hrrp_padding_complex_gaussian_v1.yaml
+    target_length: 601
+    placement: centered_on_RangeX_zero
+    method: complex_gaussian_fixed_mean_power
+    working_domain: linear_power
+    db_linearization: 10_log10_power
+    mean_padding_power_db: -140.0
+    base_seed: 20260810
