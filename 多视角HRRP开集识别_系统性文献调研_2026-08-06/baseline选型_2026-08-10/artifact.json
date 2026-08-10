@@ -1,0 +1,214 @@
+{
+  "surface": "report",
+  "manifest": {
+    "version": 1,
+    "surface": "report",
+    "title": "随机无序多视 HRRP 开集识别：Baseline 选型",
+    "description": "以公平消融链条为核心的三级 baseline 清单、第一轮最小充分集合与统一数据协议。",
+    "generatedAt": "2026-08-10T20:00:00+08:00",
+    "filters": [],
+    "cards": [
+      {
+        "id": "first_round_count",
+        "description": "覆盖单视下限、晚融合、集合融合、视角交互、EVT、重构和直接历史方法。",
+        "dataset": "headline",
+        "sourceId": "headline_query",
+        "metrics": [
+          {"label": "第一轮配置", "field": "first_round", "format": "number"}
+        ]
+      },
+      {
+        "id": "implementation_modules",
+        "description": "共享编码器、三种融合器、三种分数中的多数可复用；JDSR独立实现。",
+        "dataset": "headline",
+        "sourceId": "headline_query",
+        "metrics": [
+          {"label": "主要实现模块", "field": "modules", "format": "number"}
+        ]
+      },
+      {
+        "id": "official_code",
+        "description": "本次候选中只有Deep Sets和Set Transformer定位到作者官方代码。",
+        "dataset": "headline",
+        "sourceId": "headline_query",
+        "metrics": [
+          {"label": "已定位官方代码", "field": "official_code", "format": "number"}
+        ]
+      }
+    ],
+    "charts": [
+      {
+        "id": "tier_counts",
+        "title": "候选方法的三级筛选结果",
+        "subtitle": "分级依据是场景匹配、消融互补性和可复现性，不是跨论文指标排名。",
+        "type": "bar",
+        "dataset": "tier_counts",
+        "sourceId": "tier_query",
+        "encodings": {
+          "x": {"field": "tier", "type": "nominal", "label": "推荐等级"},
+          "y": {"field": "count", "type": "quantitative", "label": "候选数", "format": "number"},
+          "tooltip": [
+            {"field": "tier", "type": "nominal", "label": "推荐等级"},
+            {"field": "count", "type": "quantitative", "label": "候选数", "format": "number"},
+            {"field": "decision_rule", "type": "nominal", "label": "判定口径"}
+          ]
+        },
+        "yAxisTitle": "候选方法数",
+        "valueFormat": "number",
+        "layout": "full"
+      }
+    ],
+    "tables": [
+      {
+        "id": "first_round_table",
+        "title": "第一轮最小充分集合对应文献与作用",
+        "subtitle": "7个配置中，OpenMax、重构、晚融合和无角度Transformer均是受控移植；JDSR保留直接方法核心。",
+        "dataset": "first_round",
+        "sourceId": "first_round_query",
+        "density": "comfortable",
+        "layout": "full",
+        "defaultSort": {"field": "id", "direction": "asc"},
+        "columns": [
+          {"field": "id", "label": "ID", "type": "text"},
+          {"field": "paper", "label": "方法/论文", "type": "text"},
+          {"field": "line", "label": "文献线", "type": "text"},
+          {"field": "adaptation", "label": "采用方式", "type": "text"},
+          {"field": "question", "label": "回答的问题", "type": "text"},
+          {"field": "difficulty", "label": "难度", "type": "text"}
+        ]
+      }
+    ],
+    "sources": [
+      {
+        "id": "matrix",
+        "label": "逐篇 baseline 候选矩阵",
+        "path": "baseline候选矩阵.csv"
+      },
+      {
+        "id": "first_round_matrix",
+        "label": "第一轮最小充分配置表",
+        "path": "第一轮最小充分集合.csv"
+      },
+      {
+        "id": "headline_query",
+        "label": "第一轮规模与代码公开性计数",
+        "path": "第一轮最小充分集合.csv",
+        "query": {
+          "language": "sql",
+          "engine": "DuckDB",
+          "description": "从候选矩阵计算第一轮文献映射数量与已定位官方代码数量；主要实现模块数为报告定义。",
+          "sql": "WITH f AS (SELECT * FROM read_csv_auto('第一轮最小充分集合.csv', header=true)), c AS (SELECT * FROM read_csv_auto('baseline候选矩阵.csv', header=true)) SELECT count(*) AS first_round, 5 AS modules, (SELECT count(*) FROM c WHERE 公开代码数据_截至2026_08_10 LIKE '%官方%公开%' OR 公开代码数据_截至2026_08_10 LIKE '%官方PyTorch%') AS official_code FROM f",
+          "tables_used": ["第一轮最小充分集合.csv", "baseline候选矩阵.csv"],
+          "filters": ["检索截止2026-08-10", "第一轮含受控移植与直接JDSR复现"],
+          "metric_definitions": ["first_round为第一轮最小充分配置表的行数", "modules为共享实现设计中的五类主要模块", "official_code为明确定位作者官方代码的候选数"]
+        }
+      },
+      {
+        "id": "tier_query",
+        "label": "三级清单计数",
+        "path": "baseline候选矩阵.csv",
+        "query": {
+          "language": "sql",
+          "engine": "DuckDB",
+          "description": "按强烈推荐、可选和不建议复现统计候选文献。",
+          "sql": "WITH m AS (SELECT * FROM read_csv_auto('baseline候选矩阵.csv', header=true)) SELECT 分级 AS tier, count(*) AS count FROM m GROUP BY 分级 ORDER BY CASE 分级 WHEN '强烈推荐' THEN 1 WHEN '可选' THEN 2 ELSE 3 END",
+          "tables_used": ["baseline候选矩阵.csv"],
+          "filters": ["逐篇核查的18项候选"],
+          "metric_definitions": ["count为各推荐等级的候选条目数"]
+        }
+      },
+      {
+        "id": "first_round_query",
+        "label": "第一轮候选表",
+        "path": "第一轮最小充分集合.csv",
+        "query": {
+          "language": "sql",
+          "engine": "DuckDB",
+          "description": "抽取进入第一轮的论文、采用方式、实验问题和复现难度。",
+          "sql": "WITH m AS (SELECT * FROM read_csv_auto('第一轮最小充分集合.csv', header=true)) SELECT 配置ID AS id, 配置名称 AS paper, 对应文献 AS line, 融合器 || '；' || 开集分数 AS adaptation, 唯一实验问题 AS question, 实现难度 AS difficulty FROM m ORDER BY 配置ID",
+          "tables_used": ["第一轮最小充分集合.csv"],
+          "filters": ["第一轮7个受控配置"],
+          "metric_definitions": ["第一轮包含共享神经消融链和JDSR直接复现"]
+        }
+      }
+    ],
+    "blocks": [
+      {
+        "id": "title",
+        "type": "markdown",
+        "body": "# 随机无序多视 HRRP 开集识别：Baseline 选型\n\n**截止：2026-08-10。** 目标是用最少配置形成可归因的公平消融链，而不是按不同数据协议下的论文指标排序。"
+      },
+      {
+        "id": "summary",
+        "type": "markdown",
+        "body": "## 核心结论\n\n第一轮应覆盖：单视下限、晚融合、Deep Sets、无角度Set Transformer、集合级OpenMax、集合级重构，以及固定5视JDSR。前六者共享编码器和数据协议；JDSR作为独立的已发表直接方法参照。"
+      },
+      {
+        "id": "metrics",
+        "type": "metric-strip",
+        "cardIds": ["first_round_count", "implementation_modules", "official_code"]
+      },
+      {
+        "id": "chart_note",
+        "type": "markdown",
+        "body": "## 选择收束\n\n强烈推荐项数量仍高于单次实际代码库数量，因为多篇论文被抽取为共享骨架上的融合器或拒识头。可选项只在第一轮暴露明确失败模式后进入。"
+      },
+      {
+        "id": "chart",
+        "type": "chart",
+        "chartId": "tier_counts",
+        "layout": "full"
+      },
+      {
+        "id": "chain",
+        "type": "markdown",
+        "body": "## 公平消融链\n\n单视 → 晚融合回答多视数量收益；晚融合 → Deep Sets回答特征级集合建模；Deep Sets → Set Transformer回答视角交互；固定Deep Sets表征更换Energy/OpenMax/重构回答拒识机制；最后与JDSR比较是否超过最接近的直接已发表方法。"
+      },
+      {
+        "id": "table",
+        "type": "table",
+        "tableId": "first_round_table",
+        "layout": "full"
+      },
+      {
+        "id": "protocol",
+        "type": "markdown",
+        "body": "## 统一协议要点\n\n必须先按角度索引切分底层HRRP，再分别采样集合；测试未知类不得用于阈值、尾长、早停或模型选择。主视角数固定为5以对齐JDSR，并用1/3/5/8/16视图和多次随机排列做压力测试。"
+      },
+      {
+        "id": "caveats",
+        "type": "markdown",
+        "body": "## 证据边界\n\n未定位代码不等于绝对不存在。除Deep Sets和Set Transformer外，本轮未找到候选论文的作者官方实现；JDSR和角度引导Transformer的期刊页均显示资源附件为0。跨论文原始数值不可直接排名。"
+      }
+    ]
+  },
+  "sources": [
+    {"id": "matrix", "label": "逐篇 baseline 候选矩阵", "path": "baseline候选矩阵.csv"},
+    {"id": "first_round_matrix", "label": "第一轮最小充分配置表", "path": "第一轮最小充分集合.csv"},
+    {"id": "report", "label": "完整方法选型报告", "path": "baseline方法选型报告.md"}
+  ],
+  "snapshot": {
+    "version": 1,
+    "generatedAt": "2026-08-10T20:00:00+08:00",
+    "status": "ready",
+    "datasets": {
+      "headline": [
+        {"first_round": 7, "modules": 5, "official_code": 2}
+      ],
+      "tier_counts": [
+        {"tier": "强烈推荐", "count": 7, "decision_rule": "结构匹配且形成独立消融轴"},
+        {"tier": "可选", "count": 5, "decision_rule": "用于第二轮或特定失败模式"},
+        {"tier": "不建议复现", "count": 6, "decision_rule": "输入假设冲突、任务不同或投入产出比低"}
+      ],
+      "first_round": [
+        {"id": "M0", "paper": "Single-view CNN + Energy/MSP", "line": "通用置信度基线", "adaptation": "无融合；Energy为主，MSP附加", "question": "无多视信息时的分类与拒识下限是多少", "difficulty": "低"},
+        {"id": "M1", "paper": "Lundén-style late fusion + Energy/MSP", "line": "Lundén & Koivunen 2016", "adaptation": "逐视logit/概率等权平均", "question": "增加视图并做简单平均是否已经足够", "difficulty": "低"},
+        {"id": "M2", "paper": "Deep Sets + Energy/MSP", "line": "Zaheer et al. 2017", "adaptation": "masked mean pooling + 集合级分类器", "question": "严格置换不变的特征级融合是否优于决策融合", "difficulty": "低"},
+        {"id": "M3", "paper": "Set Transformer + Energy/MSP", "line": "Lee et al. 2019；Guo et al. 2023无角度分支", "adaptation": "无位置/角度SAB或ISAB + PMA", "question": "显式视角间交互是否优于均值统计", "difficulty": "中"},
+        {"id": "M4", "paper": "Deep Sets + OpenMax", "line": "Chen et al. 2019", "adaptation": "集合级激活的Weibull/OpenMax", "question": "同一集合表征上EVT是否优于Energy/MSP", "difficulty": "中"},
+        {"id": "M5", "paper": "Deep Sets + class-conditional reconstruction", "line": "Wan et al. 2019", "adaptation": "类条件重构误差的median/trimmed mean", "question": "生成式重构证据是否与EVT互补", "difficulty": "中"},
+        {"id": "M6", "paper": "JDSR-OSR", "line": "Liu et al. 2023", "adaptation": "共享类别块、块内动态原子 + 双尾GPD", "question": "现代集合方法是否超过最接近的直接方法", "difficulty": "高"}
+      ]
+    }
+  }
+}

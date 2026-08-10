@@ -1,0 +1,273 @@
+{
+  "surface": "report",
+  "manifest": {
+    "version": 1,
+    "surface": "report",
+    "title": "多视角 HRRP 目标开集识别：证据地图",
+    "description": "截至2026-08-06的分层检索结果、直接同题证据和baseline优先级摘要。",
+    "generatedAt": "2026-08-06T20:00:00+08:00",
+    "filters": [],
+    "cards": [
+      {
+        "id": "strict_direct",
+        "description": "满足多条HRRP联合、目标身份、真实未知类测试的完整实验论文。",
+        "dataset": "headline",
+        "sourceId": "metrics_query",
+        "metrics": [
+          {"label": "严格直接论文", "field": "strict_direct", "format": "number"}
+        ]
+      },
+      {
+        "id": "public_code",
+        "description": "本轮未发现三篇严格直接论文的公开实现。",
+        "dataset": "headline",
+        "sourceId": "metrics_query",
+        "metrics": [
+          {"label": "严格论文公开代码", "field": "public_code", "format": "number"}
+        ]
+      },
+      {
+        "id": "closest_random",
+        "description": "JDSR的随机角度情形最接近，但仍是固定5视且非形式化集合模型。",
+        "dataset": "headline",
+        "sourceId": "metrics_query",
+        "metrics": [
+          {"label": "随机角度直接协议", "field": "closest_random", "format": "number"}
+        ]
+      }
+    ],
+    "charts": [
+      {
+        "id": "layer_counts",
+        "title": "本次纳入矩阵的文献数量",
+        "subtitle": "单视角开集研究明显多于直接多视同题研究；数量反映本次证据矩阵，不代表领域全部产出。",
+        "type": "bar",
+        "dataset": "layer_counts",
+        "sourceId": "layer_counts_query",
+        "encodings": {
+          "x": {"field": "layer", "type": "nominal", "label": "层级"},
+          "y": {"field": "count", "type": "quantitative", "label": "文献数", "format": "number"},
+          "tooltip": [
+            {"field": "layer", "type": "nominal", "label": "层级"},
+            {"field": "count", "type": "quantitative", "label": "文献数", "format": "number"},
+            {"field": "definition", "type": "nominal", "label": "口径"}
+          ]
+        },
+        "yAxisTitle": "纳入文献数",
+        "valueFormat": "number",
+        "layout": "full"
+      }
+    ],
+    "tables": [
+      {
+        "id": "direct_table",
+        "title": "直接同题与架构先驱",
+        "subtitle": "只有后三篇构成真实未见目标类别的完整联合输入实验。",
+        "dataset": "direct",
+        "sourceId": "direct_query",
+        "density": "comfortable",
+        "layout": "full",
+        "defaultSort": {"field": "year", "direction": "asc"},
+        "columns": [
+          {"field": "status", "label": "地位", "type": "text"},
+          {"field": "year", "label": "年份", "type": "number", "align": "right"},
+          {"field": "paper", "label": "论文", "type": "text"},
+          {"field": "input", "label": "输入", "type": "text"},
+          {"field": "fusion", "label": "融合", "type": "text"},
+          {"field": "osr", "label": "开集判决", "type": "text"},
+          {"field": "fit", "label": "与本场景匹配度", "type": "text"}
+        ]
+      }
+    ],
+    "sources": [
+      {
+        "id": "matrix",
+        "label": "本轮逐篇证据矩阵",
+        "path": "分层文献矩阵.csv"
+      },
+      {
+        "id": "metrics_query",
+        "label": "证据矩阵核心计数",
+        "path": "分层文献矩阵.csv",
+        "query": {
+          "language": "sql",
+          "engine": "DuckDB",
+          "description": "从逐篇证据矩阵计算严格直接论文数、公开代码数和最接近随机角度协议数。",
+          "sql": "WITH m AS (SELECT * FROM read_csv_auto('分层文献矩阵.csv', header = true)) SELECT count(*) FILTER (WHERE 层级 = '直接同题') AS strict_direct, count(*) FILTER (WHERE 层级 = '直接同题' AND 代码和数据 NOT LIKE '%未发现%' AND 代码和数据 NOT LIKE '%未公开%') AS public_code, count(*) FILTER (WHERE ID = 'D1-02') AS closest_random FROM m",
+          "tables_used": ["分层文献矩阵.csv"],
+          "filters": ["检索截止2026-08-06", "严格直接=多HRRP联合+目标身份+真实未知类别测试"],
+          "metric_definitions": ["strict_direct为层级等于直接同题的行数", "public_code为严格直接论文中明确存在公开实现的行数", "closest_random为JDSR Situation-II协议条目数"]
+        }
+      },
+      {
+        "id": "layer_counts_query",
+        "label": "分层文献数量",
+        "path": "分层文献矩阵.csv",
+        "query": {
+          "language": "sql",
+          "engine": "DuckDB",
+          "description": "按报告的五层证据口径聚合纳入文献。",
+          "sql": "WITH m AS (SELECT * FROM read_csv_auto('分层文献矩阵.csv', header = true)), g AS (SELECT CASE WHEN 层级 = '直接同题' THEN '严格直接' WHEN 层级 = '直接架构先驱' THEN '架构先驱' WHEN 层级 IN ('多视HRRP闭集','HRRP序列闭集','多输入HRRP闭集','多站HRRP闭集','多帧HRRP闭集') THEN '多视闭集' WHEN 层级 = '单视HRRP开集' THEN '单视开集' ELSE '强相关异任务' END AS layer FROM m) SELECT layer, count(*) AS count FROM g GROUP BY layer ORDER BY count",
+          "tables_used": ["分层文献矩阵.csv"],
+          "filters": ["只计入矩阵已审阅条目", "专利和学位线索不重复计为论文"],
+          "metric_definitions": ["count为各证据层级在本次纳入矩阵中的条目数"]
+        }
+      },
+      {
+        "id": "direct_query",
+        "label": "直接同题证据表",
+        "path": "分层文献矩阵.csv",
+        "query": {
+          "language": "sql",
+          "engine": "DuckDB",
+          "description": "提取直接同题论文与多站架构先驱，整理输入、融合、开集机制和场景匹配度。",
+          "sql": "WITH m AS (SELECT * FROM read_csv_auto('分层文献矩阵.csv', header = true)) SELECT CASE WHEN 层级 = '直接同题' THEN '严格直接' ELSE '架构先驱' END AS status, CAST(substr(年份与出处, 1, 4) AS INTEGER) AS year, 完整题名 AS paper, 输入形态 AS input, 多视融合 AS fusion, 开集判决与阈值 AS osr, CASE WHEN ID = 'D1-02' THEN '最高' WHEN ID = 'D0-01' THEN '中' ELSE '中低' END AS fit FROM m WHERE 层级 IN ('直接同题','直接架构先驱') ORDER BY year",
+          "tables_used": ["分层文献矩阵.csv"],
+          "filters": ["层级为直接同题或直接架构先驱"],
+          "metric_definitions": ["fit依据与随机无序无角度多HRRP目标身份开集场景的结构一致性定性分级"]
+        }
+      },
+      {
+        "id": "jdsr",
+        "label": "JDSR官方全文",
+        "href": "https://jeit.ac.cn/cn/article/doi/10.11999/JEIT221284?viewType=HTML"
+      },
+      {
+        "id": "searchlog",
+        "label": "检索与引文链日志",
+        "path": "检索日志.md"
+      }
+    ],
+    "blocks": [
+      {
+        "id": "title",
+        "type": "markdown",
+        "body": "# 多视角 HRRP 目标开集识别：证据地图\n\n**截止：2026-08-06。** 场景是随机、无序、无显式姿态角的多HRRP集合，测试同时进行已知目标分类和未知目标拒识。"
+      },
+      {
+        "id": "executive",
+        "type": "markdown",
+        "body": "## 结论\n\n严格直接同题的完整实验论文为 JSR-OSR、JDSR-OSR 和 MtCS-OSR。三者全部属于联合稀疏或多任务重构与极值统计路线。Lundén 2016 是多基地深度决策融合先驱，但没有可核验的真实未见类别实验。"
+      },
+      {
+        "id": "metrics",
+        "type": "metric-strip",
+        "cardIds": ["strict_direct", "public_code", "closest_random"]
+      },
+      {
+        "id": "chart_note",
+        "type": "markdown",
+        "body": "## 证据分布\n\n纳入矩阵中，单视角HRRP开集边界方法已形成较丰富谱系，而直接多视联合输入实验证据仍很少。这支持把多视融合器和开集拒识头分开复现与消融。"
+      },
+      {
+        "id": "chart",
+        "type": "chart",
+        "chartId": "layer_counts",
+        "layout": "full"
+      },
+      {
+        "id": "direct_intro",
+        "type": "markdown",
+        "body": "## 直接证据\n\nJDSR Situation-II最接近用户场景，但其随机角度协议仍是固定5条HRRP，未证明对任意排列严格不变，也未覆盖全360°任意子集或可变视角数。"
+      },
+      {
+        "id": "direct",
+        "type": "table",
+        "tableId": "direct_table",
+        "layout": "full"
+      },
+      {
+        "id": "baseline",
+        "type": "markdown",
+        "body": "## Baseline优先级\n\n**P0：** 单视1D-CNN；Lundén式概率/Logit平均+known-only阈值；单视OpenMax或重构分数的稳健聚合；JDSR-OSR。\n\n**P1：** Deep Sets与无角度编码Set Transformer，分别接MSP、energy、prototype/EVT和类特定重构头。\n\n**P2：** 角度引导Transformer作为有角度信息上限；GRU/HRRPSeqNet式有序网络作为顺序误设对照。"
+      },
+      {
+        "id": "caveats",
+        "type": "markdown",
+        "body": "## 证据边界\n\n未检到不等于绝对不存在；学位论文与部分会议全文受访问权限影响。跨论文结果不可直接排名。主实验阈值应只用已知类验证数据确定，未知测试类不得用于选阈值、超参数或早停。"
+      }
+    ]
+  },
+  "sources": [
+    {
+      "id": "matrix",
+      "label": "本轮逐篇证据矩阵",
+      "path": "分层文献矩阵.csv"
+    },
+    {
+      "id": "metrics_query",
+      "label": "证据矩阵核心计数",
+      "path": "分层文献矩阵.csv",
+      "query": {
+        "language": "sql",
+        "engine": "DuckDB",
+        "description": "从逐篇证据矩阵计算严格直接论文数、公开代码数和最接近随机角度协议数。",
+        "sql": "WITH m AS (SELECT * FROM read_csv_auto('分层文献矩阵.csv', header = true)) SELECT count(*) FILTER (WHERE 层级 = '直接同题') AS strict_direct, count(*) FILTER (WHERE 层级 = '直接同题' AND 代码和数据 NOT LIKE '%未发现%' AND 代码和数据 NOT LIKE '%未公开%') AS public_code, count(*) FILTER (WHERE ID = 'D1-02') AS closest_random FROM m",
+        "tables_used": ["分层文献矩阵.csv"],
+        "filters": ["检索截止2026-08-06", "严格直接=多HRRP联合+目标身份+真实未知类别测试"],
+        "metric_definitions": ["strict_direct为层级等于直接同题的行数", "public_code为严格直接论文中明确存在公开实现的行数", "closest_random为JDSR Situation-II协议条目数"]
+      }
+    },
+    {
+      "id": "layer_counts_query",
+      "label": "分层文献数量",
+      "path": "分层文献矩阵.csv",
+      "query": {
+        "language": "sql",
+        "engine": "DuckDB",
+        "description": "按报告的五层证据口径聚合纳入文献。",
+        "sql": "WITH m AS (SELECT * FROM read_csv_auto('分层文献矩阵.csv', header = true)), g AS (SELECT CASE WHEN 层级 = '直接同题' THEN '严格直接' WHEN 层级 = '直接架构先驱' THEN '架构先驱' WHEN 层级 IN ('多视HRRP闭集','HRRP序列闭集','多输入HRRP闭集','多站HRRP闭集','多帧HRRP闭集') THEN '多视闭集' WHEN 层级 = '单视HRRP开集' THEN '单视开集' ELSE '强相关异任务' END AS layer FROM m) SELECT layer, count(*) AS count FROM g GROUP BY layer ORDER BY count",
+        "tables_used": ["分层文献矩阵.csv"],
+        "filters": ["只计入矩阵已审阅条目", "专利和学位线索不重复计为论文"],
+        "metric_definitions": ["count为各证据层级在本次纳入矩阵中的条目数"]
+      }
+    },
+    {
+      "id": "direct_query",
+      "label": "直接同题证据表",
+      "path": "分层文献矩阵.csv",
+      "query": {
+        "language": "sql",
+        "engine": "DuckDB",
+        "description": "提取直接同题论文与多站架构先驱，整理输入、融合、开集机制和场景匹配度。",
+        "sql": "WITH m AS (SELECT * FROM read_csv_auto('分层文献矩阵.csv', header = true)) SELECT CASE WHEN 层级 = '直接同题' THEN '严格直接' ELSE '架构先驱' END AS status, CAST(substr(年份与出处, 1, 4) AS INTEGER) AS year, 完整题名 AS paper, 输入形态 AS input, 多视融合 AS fusion, 开集判决与阈值 AS osr, CASE WHEN ID = 'D1-02' THEN '最高' WHEN ID = 'D0-01' THEN '中' ELSE '中低' END AS fit FROM m WHERE 层级 IN ('直接同题','直接架构先驱') ORDER BY year",
+        "tables_used": ["分层文献矩阵.csv"],
+        "filters": ["层级为直接同题或直接架构先驱"],
+        "metric_definitions": ["fit依据与随机无序无角度多HRRP目标身份开集场景的结构一致性定性分级"]
+      }
+    },
+    {
+      "id": "jdsr",
+      "label": "JDSR官方全文",
+      "href": "https://jeit.ac.cn/cn/article/doi/10.11999/JEIT221284?viewType=HTML"
+    },
+    {
+      "id": "searchlog",
+      "label": "检索与引文链日志",
+      "path": "检索日志.md"
+    }
+  ],
+  "snapshot": {
+    "version": 1,
+    "generatedAt": "2026-08-06T20:00:00+08:00",
+    "status": "ready",
+    "datasets": {
+      "headline": [
+        {"strict_direct": 3, "public_code": 0, "closest_random": 1}
+      ],
+      "layer_counts": [
+        {"layer": "严格直接", "count": 3, "definition": "多HRRP联合+目标身份+真实未知"},
+        {"layer": "架构先驱", "count": 1, "definition": "多HRRP联合+阈值但无真实未知实证"},
+        {"layer": "多视闭集", "count": 9, "definition": "多HRRP联合但无未知拒识"},
+        {"layer": "单视开集", "count": 16, "definition": "单条HRRP推理+未知拒识"},
+        {"layer": "强相关异任务", "count": 6, "definition": "运动状态/多模态/通用集合或多视开集"}
+      ],
+      "direct": [
+        {"status": "架构先驱", "year": 2016, "paper": "Lundén & Koivunen", "input": "多基地单/双基地通道", "fusion": "独立DCNN后验平均", "osr": "融合MSP阈值；无真实未知实证", "fit": "中"},
+        {"status": "严格直接", "year": 2022, "paper": "JSR-OSR", "input": "5条连续小角HRRP", "fusion": "共同原子行支撑", "osr": "双侧重构误差EVT", "fit": "中低"},
+        {"status": "严格直接", "year": 2023, "paper": "JDSR-OSR", "input": "5条连续或随机角HRRP", "fusion": "共同类别块；原子可变", "osr": "双侧重构误差GPD/EVT", "fit": "最高"},
+        {"status": "严格直接", "year": 2024, "paper": "MtCS-OSR", "input": "5条连续小角HRRP", "fusion": "Bayesian多任务压缩感知", "osr": "归一化重构误差+Weibull", "fit": "中低"}
+      ]
+    }
+  }
+}

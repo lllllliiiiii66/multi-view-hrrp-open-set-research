@@ -1,0 +1,14 @@
+id,级别,证据等级,年份,题目,场景是否多站,一次判决是否多视联合,是否开集,数据与实验,融合方式,拒识机制,全文状态,判定与作用,DOI或公开链接
+A0-01,A0,E2,2016,Deep Learning for HRRP-Based Target Recognition in Multistatic Radar Systems,是,是,是,多基地单/双基地通道仿真；官方摘要称低SNR仍可靠,各通道DCNN输出概率等权平均,全局最大概率阈值,正文受订阅限制,严格A0；真正多基地物理场景的起点,https://doi.org/10.1109/RADAR.2016.7485271
+A0-02,A0,E1,2023,基于联合动态稀疏表示的开集距离像目标识别方法,论文场景是；实验物理实现不足,是,是,MSTAR SAR芯片反演HRRP；5视；连续小角度和随机角度两种分组,JDSR共享块支撑且允许视角间原子差异,匹配/非匹配重构误差EVT与加权假设检验,官方全文,严格A0但需标注“伪多站多视实验”局限,https://doi.org/10.11999/JEIT221284
+A1-01,A1,E1/E3,2022,Open-set HRRP recognition method based on joint sparse representation,否；摘要明确单站,是,是,MSTAR反演HRRP；多视样本,联合稀疏表示,重构误差EVT,开放论文可获得,单站多视直接邻近；JDSR前驱,https://doi.org/10.1088/1742-6596/2384/1/012012
+A1-02,A1,E2,2023,Improved Sparse Representation of Open Set HRRP Recognition Method,未说明且无多视证据,未说明,是,MSTAR反演HRRP,单样本稀疏重构误差统计,重构误差均值比+EVT；避免手工尾部和权重,正文受订阅限制,同团队开集稀疏方法分支；不能升级A0,https://doi.org/10.1109/ECNCT59757.2023.10280852
+A1-03,A1,E2,2024,Open Set Target Recognition Based on Multi-Task Compressed Sensing Using Multi-View High Range Resolution Profiles,可访问摘要未说明多站,是,是,MSTAR反演HRRP；小角度区间强相关多观测,多任务压缩感知,修改后的重构误差度量+EVT+假设检验,正文受订阅限制,直接多视开集；站点定义待全文核验,https://doi.org/10.1049/icp.2024.1229
+A1-04,A1,E1,2023,一种多视距离像的开集目标识别方法、装置、设备及介质,表述多视但未提供独立多站实测,是,是,与JDSR流程和两类视角场景高度重合,JDSR类联合动态稀疏,匹配/非匹配误差EVT与阈值,专利全文,方法族佐证；不作为独立论文或独立实验证据,CN116310504A
+A2-01,A2,E2,2017,HRRP Recognition in Radar Sensor Network,是,是,否,仿真F-15/B-52/B-1B等HRRP,平均/方差特征；MCC-TMM/MKL/MRA协同,无,摘要/元数据,早期多雷达闭集表征与融合基线,https://doi.org/10.1016/j.adhoc.2016.09.001
+A2-02,A2,E1,2023,Multistation Cooperative Radar Target Recognition Based on an Angle-guided Transformer Fusion Network,是,是,否,利用实测数据构造模拟多站场景,角度引导+预特征交互+深层注意力融合,无,官方全文,多站角度差异建模与深融合候选模块,https://doi.org/10.12000/JR23014
+A2-03,A2,E2,2025,Target Recognition via Discriminant Information and Geometrical Structure Co-learning Using Radar Sensor Network,是,是,否,4类实测民机HRRP和10类AFRL仿真HRRP；含低SNR和雷达数实验,GILSC共享子空间统一跨雷达判别信息并保持局部几何,无,出版社长摘要,跨站一致性/差异性建模候选模块,https://doi.org/10.1016/j.patcog.2024.110931
+A2-04,A2,E1,2025,HRRP Unsupervised Target Feature Extraction Method Based on Multiple Contrastive Loss in Radar Sensor Networks,是,是,否,实测民用飞机数据；多雷达传感器,实例损失+Fisher损失+语义一致性损失,无,官方全文,无标签多站表征与一致性约束候选模块,https://doi.org/10.12000/JR24200
+X-01,排除,E1/E3,2016,基于联合稀疏性的多视全极化HRRP目标识别方法,否,是,否,多视全极化HRRP,多层先验联合稀疏,无,官方摘要/全文,多极化且闭集；只作联合稀疏前驱,https://doi.org/10.11999/JEIT151019
+X-02,排除,E1,2026,Research on Target Recognition Method Based on Multi-Source Information Fusion,未说明,是,是,HRRP+ISAR两种模态,ResNet18+Transformer特征对齐融合,OpenMax/Weibull,期刊全文入口,多源模态不是多站多个HRRP；只作B级工具,https://www.qk.sjtu.edu.cn/ktfy/EN/volumn/volumn_3211.shtml
+X-03,排除,E2,2024,Space Target Recognition Based on Radar Network Systems With BiGRU-Transformer and Dual Graph Fusion Network,是,是,否,多频多角RCS时间序列,BiGRU-Transformer+双图融合,无,摘要,输入不是HRRP且任务闭集,https://doi.org/10.1109/TRS.2024.3466134

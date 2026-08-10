@@ -1,0 +1,221 @@
+{
+  "surface": "report",
+  "manifest": {
+    "version": 1,
+    "surface": "report",
+    "title": "随机无序多视 HRRP 开集识别：实验前研究上下文",
+    "description": "将最新研究问题与既有 baseline 文献证据收束为 V=3 主协议下的七项可执行控制链。",
+    "generatedAt": "2026-08-10T23:00:00+08:00",
+    "filters": [],
+    "cards": [
+      {
+        "id": "baseline_count",
+        "description": "第一轮最小充分集合 B0-B6。",
+        "dataset": "headline",
+        "sourceId": "headline_query",
+        "metrics": [{"label": "第一轮 baseline", "field": "baseline_count", "format": "number"}]
+      },
+      {
+        "id": "main_views",
+        "description": "所有目标级主实验固定为三个随机无序视角。",
+        "dataset": "headline",
+        "sourceId": "headline_query",
+        "metrics": [{"label": "主视角数 V", "field": "main_views", "format": "number"}]
+      },
+      {
+        "id": "research_questions",
+        "description": "多视收益、融合层级、OpenMax位置和直接方法对照。",
+        "dataset": "headline",
+        "sourceId": "headline_query",
+        "metrics": [{"label": "受控研究问题", "field": "question_count", "format": "number"}]
+      }
+    ],
+    "charts": [
+      {
+        "id": "question_coverage",
+        "title": "各研究问题涉及的 baseline 配置数",
+        "subtitle": "计数表示控制链覆盖，不表示方法性能；R3 采用 B1/B2/B4/B5 的 2×2 联合解释。",
+        "type": "bar",
+        "dataset": "question_coverage",
+        "sourceId": "coverage_query",
+        "encodings": {
+          "x": {"field": "question", "type": "nominal", "label": "研究问题"},
+          "y": {"field": "baseline_count", "type": "quantitative", "label": "配置数", "format": "number"},
+          "tooltip": [
+            {"field": "question", "type": "nominal", "label": "研究问题"},
+            {"field": "baseline_count", "type": "quantitative", "label": "配置数", "format": "number"},
+            {"field": "comparison", "type": "nominal", "label": "主比较"}
+          ]
+        },
+        "yAxisTitle": "Baseline 配置数",
+        "valueFormat": "number",
+        "layout": "full"
+      }
+    ],
+    "tables": [
+      {
+        "id": "baseline_table",
+        "title": "B0-B6 统一执行表",
+        "subtitle": "排序即实现优先级；V=5 只出现在 B4/B5/B6 的论文对齐辅助分支。",
+        "dataset": "baseline_plan",
+        "sourceId": "baseline_query",
+        "density": "comfortable",
+        "layout": "full",
+        "defaultSort": {"field": "order", "direction": "asc"},
+        "columns": [
+          {"field": "order", "label": "顺序", "type": "number"},
+          {"field": "priority", "label": "优先级", "type": "text"},
+          {"field": "baseline", "label": "Baseline", "type": "text"},
+          {"field": "question", "label": "问题", "type": "text"},
+          {"field": "fusion", "label": "输入与融合", "type": "text"},
+          {"field": "decision", "label": "开集判决", "type": "text"},
+          {"field": "purpose", "label": "验证目的", "type": "text"},
+          {"field": "control", "label": "关键控制", "type": "text"}
+        ]
+      }
+    ],
+    "sources": [
+      {
+        "id": "context_report",
+        "label": "实验前研究上下文",
+        "path": "实验前研究上下文.md"
+      },
+      {
+        "id": "prior_report",
+        "label": "此前 baseline 方法选型报告",
+        "path": "baseline方法选型报告.md"
+      },
+      {
+        "id": "chat_context",
+        "label": "项目 Chat：多视角HRRP识别讨论（conversation 6a72e353-88cc-83ec-8e17-df4ed7b31149）"
+      },
+      {
+        "id": "headline_query",
+        "label": "正式执行表规模",
+        "path": "统一baseline执行表.csv",
+        "query": {
+          "language": "sql",
+          "engine": "DuckDB",
+          "description": "从正式执行表统计第一轮 baseline 数，并读取已冻结的主视角数与研究问题数。",
+          "sql": "WITH b AS (SELECT * FROM read_csv_auto('统一baseline执行表.csv', header=true)) SELECT count(*) AS baseline_count, 3 AS main_views, 4 AS question_count FROM b",
+          "tables_used": ["统一baseline执行表.csv"],
+          "filters": ["第一轮 B0-B6", "主协议 V=3"],
+          "metric_definitions": ["baseline_count为正式执行表行数", "main_views为主目标级样本视角数", "question_count为R1-R4四个受控问题"]
+        }
+      },
+      {
+        "id": "coverage_query",
+        "label": "研究问题覆盖计数",
+        "path": "统一baseline执行表.csv",
+        "query": {
+          "language": "sql",
+          "engine": "DuckDB",
+          "description": "将每个 baseline 对应的研究问题拆分后计数。",
+          "sql": "WITH m AS (SELECT * FROM read_csv_auto('统一baseline执行表.csv', header=true)), q AS (SELECT trim(u.question) AS question FROM m, UNNEST(string_split(m.\"研究问题\", '；')) AS u(question)) SELECT question, count(*) AS baseline_count FROM q GROUP BY question ORDER BY question",
+          "tables_used": ["统一baseline执行表.csv"],
+          "filters": ["只统计B0-B6主链"],
+          "metric_definitions": ["baseline_count为标注参与该研究问题的配置数"]
+        }
+      },
+      {
+        "id": "baseline_query",
+        "label": "B0-B6 统一执行表",
+        "path": "统一baseline执行表.csv",
+        "query": {
+          "language": "sql",
+          "engine": "DuckDB",
+          "description": "按正式实施顺序抽取 baseline 定义、验证目的和公平性约束。",
+          "sql": "SELECT \"执行序号\"::INTEGER AS \"order\", \"优先级\" AS priority, \"Baseline\" AS baseline, \"研究问题\" AS question, \"输入与融合\" AS fusion, \"开集判决\" AS decision, \"验证目的\" AS purpose, \"关键公平性约束\" AS control FROM read_csv_auto('统一baseline执行表.csv', header=true) ORDER BY \"order\"",
+          "tables_used": ["统一baseline执行表.csv"],
+          "filters": ["第一轮B0-B6"],
+          "metric_definitions": ["每行是一项可执行 baseline 配置"]
+        }
+      }
+    ],
+    "blocks": [
+      {
+        "id": "title",
+        "type": "markdown",
+        "body": "# 随机无序多视 HRRP 开集识别：实验前研究上下文\n\n**结论：** B0-B6 与文献调研总体一致，且已覆盖第一轮所需的四个控制问题；不需要再加入 BDC、CFRPL 或重构。主协议必须由此前建议的 V=5 修正为 V=3。"
+      },
+      {
+        "id": "summary",
+        "type": "markdown",
+        "body": "## 已冻结的任务\n\n完整 360°、1° 间隔仿真 HRRP；主目标级输入是来自不同角度域的 3 条随机无序 HRRP；不提供角度、域编号或顺序。10 类第一轮暂按 7 个已知、3 个未知划分，未知类不参与训练、校准或阈值选择。"
+      },
+      {
+        "id": "metrics",
+        "type": "metric-strip",
+        "cardIds": ["baseline_count", "main_views", "research_questions"]
+      },
+      {
+        "id": "coverage_heading",
+        "type": "markdown",
+        "body": "## 控制链覆盖\n\nR1 用 B0→B1；R2 用 B1→B2→B3；R3 用 B1/B2/B4/B5 的 2×2 联合解释；R4 用 B6 与 B4/B5 比较。R3 中 B4↔B5 是完整 pipeline 比较，不能误写成只改变 OpenMax 时机的单因素实验。"
+      },
+      {
+        "id": "coverage_chart",
+        "type": "chart",
+        "chartId": "question_coverage",
+        "layout": "full"
+      },
+      {
+        "id": "plan_heading",
+        "type": "markdown",
+        "body": "## 正式 baseline 方案\n\nB0/B1/B4 共用单视 checkpoint；B2/B5 共用 Deep Sets checkpoint；B3 使用同构 1D-CNN。B6 独立实现，但使用相同底层角度划分、类别协议和已知验证阈值规则。"
+      },
+      {
+        "id": "plan_table",
+        "type": "table",
+        "tableId": "baseline_table",
+        "layout": "full"
+      },
+      {
+        "id": "corrections",
+        "type": "markdown",
+        "body": "## 关键修正\n\n1. 主 V=3；V=5 只做 B4/B5/B6 辅助对齐。 2. B0 随机抽一视并平均指标，不取无序集合的“第一项”。 3. B4 采用每视 OpenMax 的 K+1 后验软平均，不以硬拒识投票为主。 4. B5 必须在集合激活上重新拟合 OpenMax。 5. B6 主表使用已知验证集阈值，论文固定参数另报。"
+      },
+      {
+        "id": "protocol",
+        "type": "markdown",
+        "body": "## 统一协议\n\n先在每个角度域内用连续角度块切分底层 HRRP，再从各 split 独立构造集合。所有未知分数统一为越大越未知，主阈值按已知 validation 的 95% 接受率确定；报告 Accuracy/Macro-F1、AUROC、OSCR、FPR95、K+1 Macro-F1 和效率。V=3 时穷举 6 种排列进行不变性审计。"
+      },
+      {
+        "id": "boundary",
+        "type": "markdown",
+        "body": "## 证据边界\n\nLundén 只支撑后验平均结构；Guo 2023 只支撑 HRRP 闭集中的无角度 Transformer 融合；Chen 2019 是单视 HRRP OpenMax；JDSR 是最接近的直接多视 HRRP 开集对照，但原协议固定 5 视且无公开代码。Deep Sets 与 Set Transformer 有作者代码，均无本项目数据适配。"
+      }
+    ]
+  },
+  "sources": [
+    {"id": "context_report", "label": "实验前研究上下文", "path": "实验前研究上下文.md"},
+    {"id": "execution_table", "label": "统一 baseline 执行表", "path": "统一baseline执行表.csv"},
+    {"id": "prior_report", "label": "此前 baseline 方法选型报告", "path": "baseline方法选型报告.md"},
+    {"id": "chat_context", "label": "项目 Chat：多视角HRRP识别讨论（conversation 6a72e353-88cc-83ec-8e17-df4ed7b31149）"}
+  ],
+  "snapshot": {
+    "version": 1,
+    "generatedAt": "2026-08-10T23:00:00+08:00",
+    "status": "ready",
+    "datasets": {
+      "headline": [
+        {"baseline_count": 7, "main_views": 3, "question_count": 4}
+      ],
+      "question_coverage": [
+        {"question": "R1", "baseline_count": 2, "comparison": "B0 → B1"},
+        {"question": "R2", "baseline_count": 3, "comparison": "B1 → B2 → B3"},
+        {"question": "R3", "baseline_count": 4, "comparison": "B1/B2/B4/B5"},
+        {"question": "R4", "baseline_count": 3, "comparison": "B4/B5 ↔ B6"}
+      ],
+      "baseline_plan": [
+        {"order": 1, "priority": "P0", "baseline": "B0", "question": "R1", "fusion": "单视，无融合", "decision": "MSP / Energy", "purpose": "单视下限", "control": "固定种子抽一视；平均指标"},
+        {"order": 2, "priority": "P1", "baseline": "B1", "question": "R1/R2/R3", "fusion": "复用B0；后验/分数平均", "decision": "MSP / Energy", "purpose": "多视与决策融合", "control": "无集合级训练"},
+        {"order": 3, "priority": "P1", "baseline": "B2", "question": "R2/R3", "fusion": "Deep Sets mean pooling", "decision": "MSP / Energy", "purpose": "集合特征融合", "control": "无角度/位置；与B5共checkpoint"},
+        {"order": 4, "priority": "P1", "baseline": "B3", "question": "R2", "fusion": "无位置Set Transformer", "decision": "MSP / Energy", "purpose": "跨视角交互", "control": "同预算；另报参数/FLOPs"},
+        {"order": 5, "priority": "P2", "baseline": "B4", "question": "R3/R4", "fusion": "每视OpenMax后软平均", "decision": "平均未知概率", "purpose": "先拒识后融合", "control": "复用B0；不做硬投票"},
+        {"order": 6, "priority": "P2", "baseline": "B5", "question": "R3/R4", "fusion": "Deep Sets集合激活", "decision": "集合级OpenMax", "purpose": "先融合后拒识", "control": "复用B2；重新拟合尾部"},
+        {"order": 7, "priority": "P3", "baseline": "B6", "question": "R4", "fusion": "JDSR联合稀疏重构", "decision": "双尾GPD", "purpose": "直接方法对照", "control": "主V3；辅助V5；阈值公平分报"}
+      ]
+    }
+  }
+}

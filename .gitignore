@@ -1,0 +1,57 @@
+# macOS and editors
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Python environments and caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# Secrets and local-only environment files
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Raw and derived HRRP data
+data/raw/
+data/external/
+data/interim/
+data/processed/
+*.mat
+*.npy
+*.npz
+*.h5
+*.hdf5
+
+# Generated experiment artifacts
+artifacts/manifests/
+artifacts/checkpoints/
+artifacts/predictions/
+artifacts/results/
+artifacts/logs/
+checkpoints/
+outputs/
+runs/
+cache/
+*.ckpt
+*.pt
+*.pth
+*.onnx
+
+# Duplicate delivery archives
+*.zip
+*.rar
+*.7z
+
+# Small synthetic fixtures used by tests may be versioned explicitly.
+!tests/fixtures/**

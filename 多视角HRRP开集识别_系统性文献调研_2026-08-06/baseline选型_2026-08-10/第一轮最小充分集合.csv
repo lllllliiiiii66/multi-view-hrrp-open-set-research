@@ -1,0 +1,8 @@
+"配置ID","配置名称","共享编码器","融合器","开集分数","视角数","对应文献","唯一实验问题","实现难度"
+"M0","Single-view CNN + Energy/MSP","1D-CNN","无；随机固定取一视图","Energy为主，MSP附加","1","通用置信度基线","无多视信息时的分类与拒识下限是多少","低"
+"M1","Lundén-style late fusion + Energy/MSP","与M0相同","逐视logit/概率等权平均","与M0相同","主实验5；压力测试1/3/5/8/16","Lundén & Koivunen 2016","增加视图并做简单平均是否已经足够","低"
+"M2","Deep Sets + Energy/MSP","与M0相同","masked mean pooling + 集合级分类器","与M0相同","主实验5；训练和测试支持可变V","Zaheer et al. 2017","严格置换不变的特征级融合是否优于决策融合","低"
+"M3","Set Transformer + Energy/MSP","与M0相同","无位置/角度SAB或ISAB + PMA","与M0相同","主实验5；压力测试1/3/5/8/16","Lee et al. 2019；Guo et al. 2023无角度分支","显式视角间交互是否优于均值统计","中"
+"M4","Deep Sets + OpenMax","与M2相同","与M2相同","集合级激活的Weibull/OpenMax","与M2相同","Chen et al. 2019","在完全相同集合表征上EVT是否优于Energy/MSP","中"
+"M5","Deep Sets + class-conditional reconstruction","与M2相同；增加轻量解码头","与M2相同","类条件视图特征重构误差的median/trimmed mean","与M2相同","Wan et al. 2019","生成式重构证据是否提供与EVT互补的未知信息","中"
+"M6","JDSR-OSR","不使用神经编码器","共享类别块、块内动态原子联合稀疏重构","匹配右尾与非匹配左尾GPD加权","固定5","Liu et al. 2023","现代集合方法是否超过最接近的已发表直接多视开集方法","高"
