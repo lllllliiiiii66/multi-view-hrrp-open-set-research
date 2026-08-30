@@ -147,6 +147,67 @@ def _git_state(project_root: Path) -> dict[str, Any]:
         return {"commit": None, "branch": None, "dirty": None}
 
 
+def _read_system_text(path: str) -> str | None:
+    try:
+        return Path(path).read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeError):
+        return None
+
+
+def _resource_limits() -> dict[str, Any]:
+    host_cpu_count = os.cpu_count()
+    quota_cores: float | None = None
+    memory_limit_bytes: int | None = None
+    cgroup_version: int | None = None
+
+    quota_v1 = _read_system_text("/sys/fs/cgroup/cpu/cpu.cfs_quota_us")
+    period_v1 = _read_system_text("/sys/fs/cgroup/cpu/cpu.cfs_period_us")
+    memory_v1 = _read_system_text("/sys/fs/cgroup/memory/memory.limit_in_bytes")
+    if quota_v1 is not None and period_v1 is not None:
+        cgroup_version = 1
+        quota = int(quota_v1)
+        period = int(period_v1)
+        if quota > 0 and period > 0:
+            quota_cores = quota / period
+    if memory_v1 is not None:
+        parsed = int(memory_v1)
+        if 0 < parsed < 2**60:
+            memory_limit_bytes = parsed
+
+    cpu_v2 = _read_system_text("/sys/fs/cgroup/cpu.max")
+    memory_v2 = _read_system_text("/sys/fs/cgroup/memory.max")
+    if cpu_v2 is not None:
+        cgroup_version = 2
+        quota_text, period_text = cpu_v2.split()
+        if quota_text != "max":
+            quota = int(quota_text)
+            period = int(period_text)
+            if quota > 0 and period > 0:
+                quota_cores = quota / period
+    if memory_v2 not in (None, "max"):
+        parsed = int(memory_v2)
+        if parsed > 0:
+            memory_limit_bytes = parsed
+
+    effective_cpu_limit = (
+        min(float(host_cpu_count), quota_cores)
+        if host_cpu_count is not None and quota_cores is not None
+        else quota_cores or host_cpu_count
+    )
+    return {
+        "cgroup_version": cgroup_version,
+        "host_logical_cpu_count": host_cpu_count,
+        "cgroup_cpu_quota_cores": quota_cores,
+        "effective_cpu_limit": effective_cpu_limit,
+        "cgroup_memory_limit_bytes": memory_limit_bytes,
+        "cgroup_memory_limit_gib": (
+            memory_limit_bytes / (1024.0**3)
+            if memory_limit_bytes is not None
+            else None
+        ),
+    }
+
+
 def _split_pairs(
     pairs: Sequence[TwoViewPair], split: str
 ) -> tuple[TwoViewPair, ...]:
@@ -438,6 +499,7 @@ def run_smoke(
         "python": sys.version,
         "platform": platform.platform(),
         "cpu_count": os.cpu_count(),
+        "resource_limits": _resource_limits(),
         "numpy": np.__version__,
         "scipy": scipy.__version__,
         "numpy_blas": dict(blas) if isinstance(blas, Mapping) else {},

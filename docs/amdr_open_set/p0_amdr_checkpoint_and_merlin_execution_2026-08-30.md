@@ -4,7 +4,7 @@
 >
 > 阶段：P0
 >
-> 状态：可恢复 checkpoint 已实现并通过 smoke；Merlin 执行边界为建议，尚未连接或部署。
+> 状态：可恢复 checkpoint 已实现并通过 smoke；Merlin 已连接并完成首次远程核验。
 
 ## 1. 三个容易混淆的概念
 
@@ -60,4 +60,12 @@
 3. 在 Merlin 新建独立 Python 环境，记录 Python、NumPy、SciPy、BLAS、CPU、线程数和操作系统；
 4. 先复现 \(n=700\) checkpoint smoke，哈希和数值差异通过后，再执行 \(n=3500\) pilot。
 
-本次没有连接 Merlin，没有上传数据，也没有提交或推送 Git。
+上述建议记录的是撰写时的待执行状态；随后已按本记录第 6 节完成 Merlin 连接与远程核验。
+
+## 6. Merlin 首次实际核验
+
+2026-08-30 已经通过用户提供的 SSH 入口连接 Merlin。宿主机显示 128 个逻辑 CPU 和 503 GiB 内存，但当前开发机 cgroup 限额实际为 8 CPU 和 32 GiB，与用户描述一致。
+
+远程代码使用 GitHub 已推送分支 `codex/amdr-p0-smoke` 的 commit `0a9b791`；由于 Merlin 没有 GitHub HTTPS/SSH 凭据，通过经 SHA-256 校验的单分支 Git bundle 建立标准 Git 工作树，没有输入或复制密码/令牌。处理后 HRRP bundle 已经存在于 Merlin，其 profiles、manifest 和 bundle 三个 SHA-256 与配置完全一致。
+
+远端使用 Python 3.12.13、NumPy 2.5.2、SciPy 1.18.0 和 OpenBLAS 0.3.34，线程数显式设为 8。提交快照上的 113 项测试全部通过；\(n=700\) checkpoint smoke 墙钟约 1.75 秒、进程内记录峰值 RSS 约 220 MiB。远端所有离散预测与指标同本地一致，只有阈值出现约 \(4.1\times10^{-11}\) 的跨 BLAS 浮点差异。远端 checkpoint 恢复后，模型、投影和预测产物与远端未中断运行的 SHA-256 完全一致。
