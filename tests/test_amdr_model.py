@@ -233,3 +233,24 @@ def test_same_base_graph_policy_excludes_repeated_endpoint_copies() -> None:
     assert graph[0, 1] == 0.0
     assert graph[1, 0] == 0.0
     np.testing.assert_allclose(graph.sum(axis=1), np.ones(4))
+
+    changed_ids = ids.copy()
+    changed_ids[0] = "changed"
+    with pytest.raises(DataValidationError, match="graph sample IDs changed"):
+        fit_amdr(
+            train_views,
+            train_labels,
+            AMDRModelConfig(
+                lambda_manifold=0.01,
+                lambda_sparse=0.01,
+                max_iterations=2,
+                minimum_iterations=1,
+                tolerance=1.0e-30,
+                numerical_epsilon=1.0e-10,
+                solve_ridge=1.0e-6,
+                initialization_seed=29,
+                graph_same_base_policy=EXCLUDE_SAME_BASE_GRAPH,
+            ),
+            view_group_ids=(changed_ids, ids),
+            resume_checkpoint=checkpoints[-1],
+        )
