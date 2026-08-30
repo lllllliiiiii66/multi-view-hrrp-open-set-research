@@ -8,6 +8,7 @@ from hrrp_osr.evaluation.metrics import (
     evaluate_open_set,
     fpr_at_unknown_tpr,
     macro_f1_score,
+    open_set_operating_point,
     threshold_for_known_acceptance,
 )
 
@@ -47,6 +48,24 @@ def test_open_set_fixture_metrics_and_score_direction() -> None:
     assert result["fpr95"] == pytest.approx(0.25)
     assert result["threshold"] == pytest.approx(0.3)
     assert result["known_acceptance_rate"] == pytest.approx(0.75)
+    assert result["known_correct_acceptance_rate"] == pytest.approx(0.75)
     assert result["unknown_rejection_rate"] == pytest.approx(1.0)
+    assert result["open_set_harmonic_score"] == pytest.approx(6 / 7)
     assert result["k_plus_1_macro_f1"] == pytest.approx((2 / 3 + 1.0 + 8 / 9) / 3)
     assert 0.0 <= result["oscr"] <= 1.0
+
+
+def test_fixed_open_set_operating_point_uses_strict_greater_than_rejection() -> None:
+    result = open_set_operating_point(
+        known_true=np.array([0, 1]),
+        known_pred=np.array([0, 1]),
+        known_unknown_scores=np.array([0.0, 0.1]),
+        unknown_pred=np.array([0, 1]),
+        unknown_unknown_scores=np.array([0.0, 0.2]),
+        known_class_count=2,
+        threshold=0.0,
+    )
+    assert result["known_acceptance_rate"] == pytest.approx(0.5)
+    assert result["known_correct_acceptance_rate"] == pytest.approx(0.5)
+    assert result["unknown_rejection_rate"] == pytest.approx(0.5)
+    assert result["open_set_harmonic_score"] == pytest.approx(0.5)

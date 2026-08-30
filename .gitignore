@@ -40,6 +40,7 @@ artifacts/predictions/
 artifacts/results/
 artifacts/logs/
 artifacts/diagnostic/
+artifacts/amdr/
 checkpoints/
 outputs/
 runs/

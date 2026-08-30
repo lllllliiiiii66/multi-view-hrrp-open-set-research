@@ -10,13 +10,20 @@
 
 ## 当前阶段
 
-P0–P3 的统一实验框架与 B0–B6 第一轮已完成，包括主 `V=3`
-以及 B4/B5/B6 独立的 `paper_aligned_v5` 辅助对齐。未实现创新方法。
+当前主线已经收束为：以组内 Adaptive Manifold Discriminative Regression
+（AMDR）闭集多视角融合框架为基础，研究目标身份开集识别。
 
-最终实现、指标、验证和风险见
-[`docs/p1_p3_completion_2026-08-11.md`](./docs/p1_p3_completion_2026-08-11.md)。
-OpenMax 的 B4/B5 v1 固定参数运行仅作历史诊断，正式比较使用已知
-validation 候选网格选择的 v2。
+当前处于 P0：数据协议和两视角构造规则已冻结，并已完成 Python AMDR 的 fold 0 诊断性 smoke。正式预处理和 AMDR `paper_aligned` 数值边界仍待确认。
+P0 通过后，第一项方法实验仅为固定 AMDR 表示下的 Thresholded KNN。
+旧 B0–B6、OpenMax、CBD、CBD+view 和相关诊断只作历史参考，不是当前默认候选。
+
+当前路线与 Stage 1 边界见：
+
+- [`RESEARCH_CONTEXT.md`](./RESEARCH_CONTEXT.md)；
+- [AMDR 论文—代码—数据审查](./docs/sunchenglong_amdr_paper_code_audit_2026-08-29.md)；
+- [AMDR 开集研究路线与 Stage 1 协议提案](./docs/amdr_open_set/research_route_and_stage1_protocol_proposal_2026-08-30.md)。
+- [P0 Python AMDR 诊断性 smoke 记录](./docs/amdr_open_set/p0_python_amdr_smoke_2026-08-30.md)。
+- [P0 AMDR 终止、checkpoint 与 Merlin 执行建议](./docs/amdr_open_set/p0_amdr_checkpoint_and_merlin_execution_2026-08-30.md)。
 
 ## Git 边界
 
@@ -36,7 +43,10 @@ validation 候选网格选择的 v2。
 
 如将来需要跨设备同步大文件，应另行评估受控对象存储或 DVC，不把数据直接加入本仓库。
 
-## P0 数据工具
+## 历史数据工具（当前非主线）
+
+以下工具、配置与结果属于旧 B0–B6 路线，保留用于审计和必要时的公平对照；
+未经当前 AMDR 协议重新确认，不直接用于新主线实验或数值比较。
 
 版本化主数据配置位于
 [`configs/data/hrrp_10class_theta83_hh_v1.yaml`](./configs/data/hrrp_10class_theta83_hh_v1.yaml)。
@@ -82,7 +92,7 @@ python -m venv .venv
 当前数据的长度角色捷径已由用户明确接受为第一轮限制；审计仍保留
 `accepted_risk` 标记，不会把它记录为“未检测到”。
 
-## P0/B0 诊断链路
+## 历史 P0/B0 诊断链路
 
 版本化 smoke 配置位于
 [`configs/experiments/p0/b0_smoke_v1.yaml`](./configs/experiments/p0/b0_smoke_v1.yaml)。
@@ -100,7 +110,7 @@ Merlin CPU 环境已用 Python 3.12.13、PyTorch 2.13.0+cpu 完成相同测试�
 `artifacts/results/main_v3/b0_main_v1/multiseed_summary.json`；运行与审计记录见
 [`docs/p0_b0_main_v1_2026-08-10.md`](./docs/p0_b0_main_v1_2026-08-10.md)。
 
-## P1–P3 产物入口
+## 历史 P1–P3 产物入口
 
 - 版本化配置：`configs/experiments/p1/`、`p2/`、`p3/`。
 - 主结果：`artifacts/results/main_v3/`。
