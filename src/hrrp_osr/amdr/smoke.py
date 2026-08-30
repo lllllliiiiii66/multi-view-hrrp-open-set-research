@@ -64,7 +64,11 @@ def load_smoke_config(path: str | Path) -> dict[str, Any]:
         "protocol_family"
     ) != "amdr_odd_even_two_view_crossfit_v1":
         errors.append("stage/protocol_family do not match the P0 AMDR diagnostic")
-    if result_scope not in {"diagnostic_smoke", "diagnostic_convergence"}:
+    if result_scope not in {
+        "diagnostic_smoke",
+        "diagnostic_convergence",
+        "diagnostic_pilot",
+    }:
         errors.append("result_scope is not an allowed P0 AMDR diagnostic")
     bundle = _mapping(config.get("bundle"), "bundle")
     for name in ("profiles_sha256", "manifest_sha256", "bundle_sha256"):
@@ -87,9 +91,12 @@ def load_smoke_config(path: str | Path) -> dict[str, Any]:
         errors.append("odd/even and 7/3 protocol invariants are invalid")
     sampling = _mapping(config.get("sampling"), "sampling")
     counts = _mapping(sampling.get("pairs_per_class"), "sampling.pairs_per_class")
+    expected_pairs = 500 if result_scope == "diagnostic_pilot" else 100
     for split in ("train", "calibration", "test"):
-        if int(counts.get(split, 0)) != 100:
-            errors.append(f"smoke requires 100 {split} pairs per class")
+        if int(counts.get(split, 0)) != expected_pairs:
+            errors.append(
+                f"{result_scope} requires {expected_pairs} {split} pairs per class"
+            )
     if (
         sampling.get("algorithm")
         != "uniform_ordered_cross_frame_balanced_base_usage"
@@ -105,6 +112,7 @@ def load_smoke_config(path: str | Path) -> dict[str, Any]:
     expected_implementation_scope = {
         "diagnostic_smoke": "amdr_research_v1_diagnostic_budget",
         "diagnostic_convergence": "amdr_research_v1_convergence_diagnostic",
+        "diagnostic_pilot": "amdr_research_v1_pilot",
     }.get(result_scope)
     if model.get("implementation_scope") != expected_implementation_scope:
         errors.append("model implementation_scope is invalid")
