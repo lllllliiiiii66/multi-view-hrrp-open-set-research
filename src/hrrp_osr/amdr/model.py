@@ -16,6 +16,8 @@ from hrrp_osr.data.errors import DataValidationError
 AMDR_ALGORITHM_VERSION = "amdr_research_v1"
 RELATIVE_STATE_CHANGE = "relative_state_change_v1"
 ABSOLUTE_STATE_DELTA = "absolute_state_delta_v1"
+ALLOW_SAME_BASE_GRAPH = "allow_same_base_v1"
+EXCLUDE_SAME_BASE_GRAPH = "exclude_same_base_v1"
 
 
 @dataclass(frozen=True)
@@ -29,6 +31,7 @@ class AMDRModelConfig:
     initialization_seed: int
     minimum_iterations: int = 3
     convergence_metric: str = RELATIVE_STATE_CHANGE
+    graph_same_base_policy: str = ALLOW_SAME_BASE_GRAPH
 
 
 @dataclass(frozen=True)
@@ -103,6 +106,11 @@ def _validate_fit_inputs(
         ABSOLUTE_STATE_DELTA,
     }:
         errors.append("unsupported AMDR convergence metric")
+    if config.graph_same_base_policy not in {
+        ALLOW_SAME_BASE_GRAPH,
+        EXCLUDE_SAME_BASE_GRAPH,
+    }:
+        errors.append("unsupported same-base graph policy")
     if errors:
         raise DataValidationError("Invalid AMDR fit input:\n- " + "\n- ".join(errors))
     return materialized, y, int(unique.size)
@@ -113,19 +121,28 @@ def _labels_sha256(labels: np.ndarray) -> str:
     return hashlib.sha256(materialized.tobytes()).hexdigest()
 
 
-def _training_views_sha256(views: Sequence[np.ndarray]) -> str:
+def _training_views_sha256(
+    views: Sequence[np.ndarray],
+    view_group_ids: Sequence[np.ndarray] | None = None,
+) -> str:
     digest = hashlib.sha256()
     for view in views:
         materialized = np.ascontiguousarray(view, dtype=np.float64)
         digest.update(np.asarray(materialized.shape, dtype=np.int64).tobytes())
         digest.update(materialized.tobytes())
+    if view_group_ids is not None:
+        for group_ids in view_group_ids:
+            for value in group_ids:
+                encoded = str(value).encode("utf-8")
+                digest.update(len(encoded).to_bytes(8, "little"))
+                digest.update(encoded)
     return digest.hexdigest()
 
 
 def _config_signature(config: AMDRModelConfig) -> dict[str, Any]:
     """Return resume-critical settings; max_iterations may grow on resume."""
 
-    return {
+    signature = {
         "lambda_manifold": config.lambda_manifold,
         "lambda_sparse": config.lambda_sparse,
         "tolerance": config.tolerance,
@@ -136,6 +153,11 @@ def _config_signature(config: AMDRModelConfig) -> dict[str, Any]:
         "algorithm_version": AMDR_ALGORITHM_VERSION,
         "convergence_metric": config.convergence_metric,
     }
+    # Preserve compatibility with checkpoints created before the diagnostic
+    # same-base exclusion policy existed.
+    if config.graph_same_base_policy != ALLOW_SAME_BASE_GRAPH:
+        signature["graph_same_base_policy"] = config.graph_same_base_policy
+    return signature
 
 
 def save_amdr_checkpoint(path: str | Path, checkpoint: AMDRCheckpoint) -> None:
@@ -216,17 +238,58 @@ def load_amdr_checkpoint(path: str | Path) -> AMDRCheckpoint:
         raise DataValidationError(f"invalid AMDR checkpoint: {source}") from exc
 
 
+def _materialize_view_group_ids(
+    view_group_ids: Sequence[Sequence[str]] | None,
+    *,
+    sample_count: int,
+    view_count: int,
+    policy: str,
+) -> tuple[np.ndarray, ...] | None:
+    if policy == ALLOW_SAME_BASE_GRAPH:
+        return None
+    if view_group_ids is None or len(view_group_ids) != view_count:
+        raise DataValidationError(
+            "same-base graph exclusion requires one sample-ID vector per view"
+        )
+    materialized = tuple(np.asarray(ids, dtype=str) for ids in view_group_ids)
+    if any(ids.shape != (sample_count,) for ids in materialized):
+        raise DataValidationError("view sample-ID vectors have an invalid shape")
+    if any(np.any(ids == "") for ids in materialized):
+        raise DataValidationError("view sample-ID vectors contain an empty ID")
+    return materialized
+
+
+def _graph_exclusion_mask(group_ids: np.ndarray | None, count: int) -> np.ndarray:
+    if group_ids is None:
+        return np.eye(count, dtype=bool)
+    return group_ids[:, None] == group_ids[None, :]
+
+
 def _initialize_class_graphs(
-    labels: np.ndarray, class_count: int, view_count: int
+    labels: np.ndarray,
+    class_count: int,
+    view_count: int,
+    view_group_ids: tuple[np.ndarray, ...] | None,
 ) -> list[list[np.ndarray]]:
     graphs: list[list[np.ndarray]] = []
-    for _ in range(view_count):
+    for view_index in range(view_count):
         view_graphs: list[np.ndarray] = []
         for label in range(class_count):
-            count = int(np.count_nonzero(labels == label))
+            indices = np.flatnonzero(labels == label)
+            count = int(indices.size)
             graph = np.ones((count, count), dtype=np.float64)
-            np.fill_diagonal(graph, 0.0)
-            graph /= graph.sum(axis=1, keepdims=True)
+            class_group_ids = (
+                None
+                if view_group_ids is None
+                else view_group_ids[view_index][indices]
+            )
+            graph[_graph_exclusion_mask(class_group_ids, count)] = 0.0
+            row_sums = graph.sum(axis=1, keepdims=True)
+            if np.any(row_sums <= 0.0):
+                raise DataValidationError(
+                    "same-base graph exclusion left a sample without a neighbor"
+                )
+            graph /= row_sums
             view_graphs.append(graph)
         graphs.append(view_graphs)
     return graphs
@@ -265,6 +328,7 @@ def _validate_checkpoint(
     labels: np.ndarray,
     class_count: int,
     config: AMDRModelConfig,
+    view_group_ids: tuple[np.ndarray, ...] | None,
 ) -> None:
     dimensions = tuple(view.shape[1] for view in views)
     class_sizes = tuple(
@@ -283,8 +347,12 @@ def _validate_checkpoint(
         errors.append("sample count differs from checkpoint")
     if checkpoint.labels_sha256 != _labels_sha256(labels):
         errors.append("training label order differs from checkpoint")
-    if checkpoint.training_views_sha256 != _training_views_sha256(views):
-        errors.append("training view values or order differ from checkpoint")
+    if checkpoint.training_views_sha256 != _training_views_sha256(
+        views, view_group_ids
+    ):
+        errors.append(
+            "training view values or order differ from checkpoint, or graph sample IDs changed"
+        )
     if checkpoint.config_signature != _config_signature(config):
         errors.append("resume-critical model config differs from checkpoint")
     if checkpoint.weights.shape != (sum(dimensions), class_count):
@@ -361,12 +429,21 @@ def fit_amdr(
     labels: np.ndarray,
     config: AMDRModelConfig,
     *,
+    view_group_ids: Sequence[Sequence[str]] | None = None,
     resume_checkpoint: AMDRCheckpoint | None = None,
     checkpoint_callback: Callable[[AMDRCheckpoint], None] | None = None,
 ) -> AMDRFitResult:
     materialized, y, class_count = _validate_fit_inputs(views, labels, config)
     dimensions = tuple(view.shape[1] for view in materialized)
-    training_views_sha256 = _training_views_sha256(materialized)
+    materialized_group_ids = _materialize_view_group_ids(
+        view_group_ids,
+        sample_count=y.size,
+        view_count=len(materialized),
+        policy=config.graph_same_base_policy,
+    )
+    training_views_sha256 = _training_views_sha256(
+        materialized, materialized_group_ids
+    )
     slices = _view_slices(dimensions)
     combined = np.concatenate(materialized, axis=1)
     sample_count, total_dimension = combined.shape
@@ -377,7 +454,12 @@ def fit_amdr(
         rng = np.random.default_rng(config.initialization_seed)
         weights = rng.random((total_dimension, class_count), dtype=np.float64)
         alpha = np.full(len(materialized), 1.0 / len(materialized), dtype=np.float64)
-        graphs = _initialize_class_graphs(y, class_count, len(materialized))
+        graphs = _initialize_class_graphs(
+            y,
+            class_count,
+            len(materialized),
+            materialized_group_ids,
+        )
         history: list[dict[str, Any]] = []
         start_iteration = 0
     else:
@@ -387,6 +469,7 @@ def fit_amdr(
             labels=y,
             class_count=class_count,
             config=config,
+            view_group_ids=materialized_group_ids,
         )
         adjusted_target = resume_checkpoint.adjusted_target.copy()
         weights = resume_checkpoint.weights.copy()
@@ -470,8 +553,19 @@ def fit_amdr(
                     projected[indices], projected[indices]
                 )
                 inverse = 1.0 / (distances + config.numerical_epsilon)
-                np.fill_diagonal(inverse, 0.0)
+                class_group_ids = (
+                    None
+                    if materialized_group_ids is None
+                    else materialized_group_ids[view_index][indices]
+                )
+                inverse[
+                    _graph_exclusion_mask(class_group_ids, len(indices))
+                ] = 0.0
                 row_sums = inverse.sum(axis=1, keepdims=True)
+                if np.any(row_sums <= 0.0):
+                    raise DataValidationError(
+                        "AMDR graph update left a sample without a neighbor"
+                    )
                 updated_graph = inverse / np.maximum(
                     row_sums, config.numerical_epsilon
                 )

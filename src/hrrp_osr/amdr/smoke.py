@@ -28,7 +28,9 @@ from hrrp_osr.amdr.data import (
     write_pair_manifest,
 )
 from hrrp_osr.amdr.model import (
+    ALLOW_SAME_BASE_GRAPH,
     AMDR_ALGORITHM_VERSION,
+    EXCLUDE_SAME_BASE_GRAPH,
     RELATIVE_STATE_CHANGE,
     AMDRCheckpoint,
     AMDRModelConfig,
@@ -38,6 +40,12 @@ from hrrp_osr.amdr.model import (
     prune_amdr_weight_rows,
     project_views,
     save_amdr_checkpoint,
+)
+from hrrp_osr.amdr.reduction import (
+    SHARED_TRAIN_BASE_PCA,
+    SharedPCAModel,
+    apply_shared_pca,
+    fit_shared_pca,
 )
 from hrrp_osr.data.errors import DataConfigError, DataValidationError
 from hrrp_osr.data.manifest import file_sha256
@@ -119,6 +127,21 @@ def load_smoke_config(path: str | Path) -> dict[str, Any]:
         PEAK_RELATIVE_AMPLITUDE_TRANSFORM_ID,
     }:
         errors.append("smoke preprocessing transform is invalid")
+    reduction = preprocessing.get("dimension_reduction")
+    if reduction is not None:
+        reduction_mapping = _mapping(
+            reduction, "preprocessing.dimension_reduction"
+        )
+        if reduction_mapping.get("algorithm") != SHARED_TRAIN_BASE_PCA:
+            errors.append("dimension reduction algorithm is invalid")
+        if not 1 <= int(reduction_mapping.get("output_dimension", 0)) < 601:
+            errors.append("PCA output dimension must be in 1..600")
+        if reduction_mapping.get("fit_population") != (
+            "unique_known_train_base_profiles_current_fold"
+        ):
+            errors.append("PCA fit population is invalid")
+        if reduction_mapping.get("shared_across_views") is not True:
+            errors.append("PCA must be shared across views")
     model = _mapping(config.get("model"), "model")
     if model.get("algorithm_version") != AMDR_ALGORITHM_VERSION:
         errors.append("model algorithm_version is invalid")
@@ -128,6 +151,7 @@ def load_smoke_config(path: str | Path) -> dict[str, Any]:
         "diagnostic_pilot": {
             "amdr_research_v1_pilot",
             "amdr_research_v1_alignment_diagnostic",
+            "amdr_research_v1_overfit_diagnostic",
         },
     }.get(result_scope)
     implementation_scope = model.get("implementation_scope")
@@ -139,6 +163,11 @@ def load_smoke_config(path: str | Path) -> dict[str, Any]:
         errors.append("model implementation_scope is invalid")
     if model.get("convergence_metric") != RELATIVE_STATE_CHANGE:
         errors.append("model convergence_metric is invalid")
+    if model.get("graph_same_base_policy", ALLOW_SAME_BASE_GRAPH) not in {
+        ALLOW_SAME_BASE_GRAPH,
+        EXCLUDE_SAME_BASE_GRAPH,
+    }:
+        errors.append("model graph_same_base_policy is invalid")
     max_iterations = int(model.get("max_iterations", 0))
     max_allowed = 5 if result_scope == "diagnostic_smoke" else 300
     if not 1 <= max_iterations <= max_allowed:
@@ -274,6 +303,33 @@ def _labels(
     )
 
 
+def _fit_shared_train_base_pca(
+    train_pairs: Sequence[TwoViewPair],
+    train_views: Sequence[np.ndarray],
+    *,
+    output_dimension: int,
+) -> SharedPCAModel:
+    profiles_by_id: dict[str, np.ndarray] = {}
+    for row_index, pair in enumerate(train_pairs):
+        for view_index, sample_id in enumerate(
+            (pair.view1_sample_id, pair.view2_sample_id)
+        ):
+            profile = np.asarray(train_views[view_index][row_index], dtype=np.float64)
+            existing = profiles_by_id.get(sample_id)
+            if existing is not None and not np.array_equal(existing, profile):
+                raise DataValidationError(
+                    "one PCA fit sample ID maps to multiple transformed profiles"
+                )
+            profiles_by_id[sample_id] = profile
+    ordered_ids = tuple(sorted(profiles_by_id))
+    profiles = np.stack([profiles_by_id[sample_id] for sample_id in ordered_ids])
+    return fit_shared_pca(
+        profiles,
+        sample_ids=ordered_ids,
+        output_dimension=output_dimension,
+    )
+
+
 def _predictions_rows(
     pairs: Sequence[TwoViewPair],
     true_labels: np.ndarray,
@@ -385,6 +441,21 @@ def run_smoke(
         )
         for split in split_pairs
     }
+    reduction_raw = preprocessing.get("dimension_reduction")
+    pca_model: SharedPCAModel | None = None
+    if reduction_raw is not None:
+        reduction = _mapping(
+            reduction_raw, "preprocessing.dimension_reduction"
+        )
+        pca_model = _fit_shared_train_base_pca(
+            split_pairs["train"],
+            split_views["train"],
+            output_dimension=int(reduction["output_dimension"]),
+        )
+        split_views = {
+            split: tuple(apply_shared_pca(view, pca_model) for view in views)
+            for split, views in split_views.items()
+        }
     known_classes = tuple(sorted(bundle.known_classes))
     class_to_label = {class_name: index for index, class_name in enumerate(known_classes)}
     label_to_class = {index: class_name for class_name, index in class_to_label.items()}
@@ -407,6 +478,9 @@ def run_smoke(
         minimum_iterations=int(model_raw.get("minimum_iterations", 3)),
         convergence_metric=str(
             model_raw.get("convergence_metric", "relative_state_change_v1")
+        ),
+        graph_same_base_policy=str(
+            model_raw.get("graph_same_base_policy", ALLOW_SAME_BASE_GRAPH)
         ),
     )
     checkpoint_raw = _mapping(config.get("checkpoint", {}), "checkpoint")
@@ -434,10 +508,19 @@ def run_smoke(
         ):
             save_amdr_checkpoint(latest_checkpoint_path, checkpoint)
 
+    view_group_ids = (
+        (
+            tuple(pair.view1_sample_id for pair in split_pairs["train"]),
+            tuple(pair.view2_sample_id for pair in split_pairs["train"]),
+        )
+        if model_config.graph_same_base_policy == EXCLUDE_SAME_BASE_GRAPH
+        else None
+    )
     fit = fit_amdr(
         split_views["train"],
         split_labels["train"],
         model_config,
+        view_group_ids=view_group_ids,
         resume_checkpoint=resume_checkpoint,
         checkpoint_callback=checkpoint_callback if checkpoint_raw else None,
     )
@@ -503,6 +586,24 @@ def run_smoke(
                 split: len(split_pairs[split]) for split in split_pairs
             },
             "base_profile_transform": profile_transform,
+            "dimension_reduction": (
+                "none" if pca_model is None else SHARED_TRAIN_BASE_PCA
+            ),
+            "dimension_reduction_output_dimension": (
+                None if pca_model is None else pca_model.output_dimension
+            ),
+            "dimension_reduction_fit_sample_count": (
+                None if pca_model is None else pca_model.fit_sample_count
+            ),
+            "dimension_reduction_fit_sample_ids_sha256": (
+                None if pca_model is None else pca_model.fit_sample_ids_sha256
+            ),
+            "dimension_reduction_cumulative_explained_variance": (
+                None
+                if pca_model is None
+                else pca_model.cumulative_explained_variance
+            ),
+            "graph_same_base_policy": model_config.graph_same_base_policy,
             "post_training_row_prune_squared_norm_threshold": row_prune_threshold,
             "pruned_weight_row_count": pruned_weight_row_count,
             "slot_order": str(sampling.get("slot_order", RANDOMIZED_SLOT_ORDER)),
@@ -523,6 +624,16 @@ def run_smoke(
         ),
         pruned_weight_row_count=np.asarray(pruned_weight_row_count),
     )
+    if pca_model is not None:
+        np.savez_compressed(
+            destination / "preprocessor.npz",
+            algorithm=np.asarray(SHARED_TRAIN_BASE_PCA),
+            mean=pca_model.mean,
+            components=pca_model.components,
+            explained_variance_ratio=pca_model.explained_variance_ratio,
+            fit_sample_ids_sha256=np.asarray(pca_model.fit_sample_ids_sha256),
+            fit_sample_count=np.asarray(pca_model.fit_sample_count),
+        )
     np.savez_compressed(
         destination / "projections.npz",
         train=projections["train"],

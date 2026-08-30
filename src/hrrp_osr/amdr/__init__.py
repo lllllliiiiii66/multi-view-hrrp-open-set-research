@@ -13,10 +13,12 @@ from .data import (
     peak_relative_power_from_db,
 )
 from .model import (
+    ALLOW_SAME_BASE_GRAPH,
     AMDR_ALGORITHM_VERSION,
     AMDRCheckpoint,
     AMDRFitResult,
     AMDRModelConfig,
+    EXCLUDE_SAME_BASE_GRAPH,
     fit_amdr,
     knn_predict_and_score,
     load_amdr_checkpoint,
@@ -24,20 +26,32 @@ from .model import (
     project_views,
     save_amdr_checkpoint,
 )
+from .reduction import (
+    SHARED_TRAIN_BASE_PCA,
+    SharedPCAModel,
+    apply_shared_pca,
+    fit_shared_pca,
+)
 
 __all__ = [
+    "ALLOW_SAME_BASE_GRAPH",
     "AMDR_ALGORITHM_VERSION",
     "AMDRCheckpoint",
     "AMDRFitResult",
     "AMDRModelConfig",
     "CANONICAL_SLOT_ORDER",
+    "EXCLUDE_SAME_BASE_GRAPH",
     "PEAK_RELATIVE_AMPLITUDE_TRANSFORM_ID",
     "PEAK_RELATIVE_POWER_TRANSFORM_ID",
     "RANDOMIZED_SLOT_ORDER",
+    "SHARED_TRAIN_BASE_PCA",
+    "SharedPCAModel",
     "TwoViewPair",
     "assign_odd_angle_folds",
+    "apply_shared_pca",
     "build_fold_pairs",
     "fit_amdr",
+    "fit_shared_pca",
     "knn_predict_and_score",
     "load_amdr_checkpoint",
     "materialize_pair_views",
