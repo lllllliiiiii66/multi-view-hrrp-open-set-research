@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -597,6 +597,24 @@ def project_views(
     if not np.isfinite(projected).all():
         raise DataValidationError("AMDR projection contains NaN or Inf")
     return projected
+
+
+def prune_amdr_weight_rows(
+    fit: AMDRFitResult,
+    *,
+    squared_row_norm_threshold: float,
+) -> tuple[AMDRFitResult, int]:
+    """Apply the reference MATLAB demo's post-fit row threshold exactly once."""
+
+    threshold = float(squared_row_norm_threshold)
+    if not np.isfinite(threshold) or threshold < 0:
+        raise DataValidationError("AMDR row-prune threshold must be finite and nonnegative")
+    if threshold == 0:
+        return fit, 0
+    weights = fit.weights.copy()
+    pruned_mask = np.sum(weights * weights, axis=1) < threshold
+    weights[pruned_mask] = 0.0
+    return replace(fit, weights=weights), int(np.count_nonzero(pruned_mask))
 
 
 def knn_predict_and_score(

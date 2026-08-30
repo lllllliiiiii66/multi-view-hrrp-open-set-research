@@ -18,7 +18,10 @@ import scipy
 import yaml
 
 from hrrp_osr.amdr.data import (
+    CANONICAL_SLOT_ORDER,
+    PEAK_RELATIVE_AMPLITUDE_TRANSFORM_ID,
     PEAK_RELATIVE_POWER_TRANSFORM_ID,
+    RANDOMIZED_SLOT_ORDER,
     TwoViewPair,
     build_fold_pairs,
     materialize_pair_views,
@@ -32,6 +35,7 @@ from hrrp_osr.amdr.model import (
     fit_amdr,
     knn_predict_and_score,
     load_amdr_checkpoint,
+    prune_amdr_weight_rows,
     project_views,
     save_amdr_checkpoint,
 )
@@ -97,14 +101,23 @@ def load_smoke_config(path: str | Path) -> dict[str, Any]:
             errors.append(
                 f"{result_scope} requires {expected_pairs} {split} pairs per class"
             )
+    sampling_algorithm = sampling.get("algorithm")
+    expected_slot_order = {
+        "uniform_ordered_cross_frame_balanced_base_usage": RANDOMIZED_SLOT_ORDER,
+        "uniform_canonical_cross_frame_balanced_base_usage": CANONICAL_SLOT_ORDER,
+    }.get(sampling_algorithm)
+    slot_order = sampling.get("slot_order", RANDOMIZED_SLOT_ORDER)
     if (
-        sampling.get("algorithm")
-        != "uniform_ordered_cross_frame_balanced_base_usage"
+        expected_slot_order is None
+        or slot_order != expected_slot_order
         or sampling.get("duplicate_unordered_pairs") is not False
     ):
         errors.append("sampling invariants are invalid")
     preprocessing = _mapping(config.get("preprocessing"), "preprocessing")
-    if preprocessing.get("transform") != PEAK_RELATIVE_POWER_TRANSFORM_ID:
+    if preprocessing.get("transform") not in {
+        PEAK_RELATIVE_POWER_TRANSFORM_ID,
+        PEAK_RELATIVE_AMPLITUDE_TRANSFORM_ID,
+    }:
         errors.append("smoke preprocessing transform is invalid")
     model = _mapping(config.get("model"), "model")
     if model.get("algorithm_version") != AMDR_ALGORITHM_VERSION:
@@ -112,9 +125,17 @@ def load_smoke_config(path: str | Path) -> dict[str, Any]:
     expected_implementation_scope = {
         "diagnostic_smoke": "amdr_research_v1_diagnostic_budget",
         "diagnostic_convergence": "amdr_research_v1_convergence_diagnostic",
-        "diagnostic_pilot": "amdr_research_v1_pilot",
+        "diagnostic_pilot": {
+            "amdr_research_v1_pilot",
+            "amdr_research_v1_alignment_diagnostic",
+        },
     }.get(result_scope)
-    if model.get("implementation_scope") != expected_implementation_scope:
+    implementation_scope = model.get("implementation_scope")
+    if isinstance(expected_implementation_scope, set):
+        scope_valid = implementation_scope in expected_implementation_scope
+    else:
+        scope_valid = implementation_scope == expected_implementation_scope
+    if not scope_valid:
         errors.append("model implementation_scope is invalid")
     if model.get("convergence_metric") != RELATIVE_STATE_CHANGE:
         errors.append("model convergence_metric is invalid")
@@ -126,6 +147,11 @@ def load_smoke_config(path: str | Path) -> dict[str, Any]:
         model.get("max_iterations", 0)
     ):
         errors.append("model.minimum_iterations is invalid")
+    row_prune_threshold = float(
+        model.get("post_training_row_prune_squared_norm_threshold", 0.0)
+    )
+    if row_prune_threshold not in {0.0, 1.0e-5}:
+        errors.append("post-training row-prune threshold must be 0 or 1e-5")
     checkpoint = _mapping(config.get("checkpoint", {}), "checkpoint")
     if checkpoint:
         if checkpoint.get("strategy") != "latest_only_atomic_replace":
@@ -341,6 +367,7 @@ def run_smoke(
         fold_count=int(protocol["fold_count"]),
         base_seed=int(sampling["base_seed"]),
         pairs_per_class=pair_counts,
+        slot_order=str(sampling.get("slot_order", RANDOMIZED_SLOT_ORDER)),
     )
     write_pair_manifest(destination / "pair_manifest.csv", pairs)
 
@@ -414,6 +441,13 @@ def run_smoke(
         resume_checkpoint=resume_checkpoint,
         checkpoint_callback=checkpoint_callback if checkpoint_raw else None,
     )
+    row_prune_threshold = float(
+        model_raw.get("post_training_row_prune_squared_norm_threshold", 0.0)
+    )
+    fit, pruned_weight_row_count = prune_amdr_weight_rows(
+        fit,
+        squared_row_norm_threshold=row_prune_threshold,
+    )
     projections = {
         split: project_views(split_views[split], fit)
         for split in split_views
@@ -469,6 +503,9 @@ def run_smoke(
                 split: len(split_pairs[split]) for split in split_pairs
             },
             "base_profile_transform": profile_transform,
+            "post_training_row_prune_squared_norm_threshold": row_prune_threshold,
+            "pruned_weight_row_count": pruned_weight_row_count,
+            "slot_order": str(sampling.get("slot_order", RANDOMIZED_SLOT_ORDER)),
         }
     )
     _write_json(destination / "metrics.json", metrics)
@@ -481,6 +518,10 @@ def run_smoke(
         weights=fit.weights,
         alpha=fit.alpha,
         known_classes=np.asarray(known_classes),
+        post_training_row_prune_squared_norm_threshold=np.asarray(
+            row_prune_threshold
+        ),
+        pruned_weight_row_count=np.asarray(pruned_weight_row_count),
     )
     np.savez_compressed(
         destination / "projections.npz",

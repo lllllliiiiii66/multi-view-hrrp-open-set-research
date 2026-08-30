@@ -1,0 +1,45 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+from hrrp_osr.amdr.data import (
+    CANONICAL_SLOT_ORDER,
+    PEAK_RELATIVE_AMPLITUDE_TRANSFORM_ID,
+    RANDOMIZED_SLOT_ORDER,
+)
+from hrrp_osr.amdr.smoke import load_smoke_config
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_alignment_pilot_configs_are_cumulative_and_protocol_matched() -> None:
+    names = (
+        "pilot_fold0_amplitude_v1.yaml",
+        "pilot_fold0_amplitude_pruned_v1.yaml",
+        "pilot_fold0_amplitude_pruned_canonical_v1.yaml",
+    )
+    configs = [
+        load_smoke_config(PROJECT_ROOT / "configs" / "amdr" / name)
+        for name in names
+    ]
+    assert {config["protocol_id"] for config in configs} == {
+        "amdr_10class_odd_even_crossfit_pilot_fold0_v1"
+    }
+    assert {config["bundle"]["bundle_sha256"] for config in configs} == {
+        "79176091b5b745e5df5957f1bb4ade7304c1403a4a32e64622e012db67d5a0c5"
+    }
+    assert all(
+        config["preprocessing"]["transform"]
+        == PEAK_RELATIVE_AMPLITUDE_TRANSFORM_ID
+        for config in configs
+    )
+    assert [
+        float(config["model"]["post_training_row_prune_squared_norm_threshold"])
+        for config in configs
+    ] == [0.0, 1.0e-5, 1.0e-5]
+    assert [config["sampling"]["slot_order"] for config in configs] == [
+        RANDOMIZED_SLOT_ORDER,
+        RANDOMIZED_SLOT_ORDER,
+        CANONICAL_SLOT_ORDER,
+    ]

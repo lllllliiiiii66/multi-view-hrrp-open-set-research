@@ -5,14 +5,43 @@ import pytest
 
 from hrrp_osr.data.errors import DataValidationError
 from hrrp_osr.amdr.model import (
+    AMDRFitResult,
     AMDRModelConfig,
     fit_amdr,
     knn_predict_and_score,
     load_amdr_checkpoint,
     pairwise_squared_distances,
     project_views,
+    prune_amdr_weight_rows,
     save_amdr_checkpoint,
 )
+
+
+def test_reference_row_prune_uses_squared_norm_strict_threshold() -> None:
+    weights = np.array(
+        [
+            [1.0e-3, 2.0e-3],
+            [4.0e-3, 0.0],
+            [1.0, 0.0],
+        ]
+    )
+    fit = AMDRFitResult(
+        weights=weights,
+        alpha=np.array([0.5, 0.5]),
+        view_dimensions=(1, 2),
+        class_count=2,
+        history=(),
+        converged=False,
+        stop_reason="fixture",
+    )
+    pruned, count = prune_amdr_weight_rows(
+        fit,
+        squared_row_norm_threshold=1.0e-5,
+    )
+    assert count == 1
+    np.testing.assert_array_equal(pruned.weights[0], np.zeros(2))
+    np.testing.assert_array_equal(pruned.weights[1:], weights[1:])
+    np.testing.assert_array_equal(fit.weights, weights)
 
 
 def test_pairwise_squared_distances_matches_hand_calculation() -> None:

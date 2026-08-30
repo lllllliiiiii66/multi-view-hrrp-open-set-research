@@ -6,9 +6,13 @@ import numpy as np
 import pytest
 
 from hrrp_osr.amdr.data import (
+    CANONICAL_SLOT_ORDER,
+    PEAK_RELATIVE_AMPLITUDE_TRANSFORM_ID,
     PEAK_RELATIVE_POWER_TRANSFORM_ID,
+    RANDOMIZED_SLOT_ORDER,
     _select_balanced_pairs,
     assign_odd_angle_folds,
+    peak_relative_amplitude_from_power_db,
     peak_relative_power_from_db,
 )
 from hrrp_osr.data.errors import DataValidationError
@@ -73,6 +77,38 @@ def test_balanced_pair_sampling_is_reproducible_cross_frame_and_unique() -> None
     assert {pair.view2_frame_id for pair in first}
 
 
+def test_canonical_slots_preserve_selected_pairs_and_sort_endpoints() -> None:
+    rows = _synthetic_rows()
+    kwargs = {
+        "count": 40,
+        "base_seed": 20260830,
+        "protocol_id": "fixture",
+        "split": "train",
+        "fold_index": 0,
+        "class_name": "known-a",
+    }
+    randomized = _select_balanced_pairs(
+        rows,
+        slot_order=RANDOMIZED_SLOT_ORDER,
+        **kwargs,
+    )
+    canonical = _select_balanced_pairs(
+        rows,
+        slot_order=CANONICAL_SLOT_ORDER,
+        **kwargs,
+    )
+    randomized_unordered = {
+        frozenset((pair.view1_sample_id, pair.view2_sample_id))
+        for pair in randomized
+    }
+    canonical_unordered = {
+        frozenset((pair.view1_sample_id, pair.view2_sample_id)) for pair in canonical
+    }
+    assert canonical_unordered == randomized_unordered
+    assert all(pair.view1_angle_deg < pair.view2_angle_deg for pair in canonical)
+    assert any(pair.view1_angle_deg > pair.view2_angle_deg for pair in randomized)
+
+
 def test_peak_relative_power_matches_power_db_definition() -> None:
     profile = np.tile(np.linspace(-20.0, 0.0, 601), (2, 1))
     relative = peak_relative_power_from_db(profile)
@@ -88,6 +124,19 @@ def test_peak_relative_power_is_invariant_to_profile_db_offset() -> None:
     shifted = peak_relative_power_from_db(profile + np.asarray([[17.0], [-9.0]]))
     np.testing.assert_allclose(shifted, transformed, rtol=1.0e-14, atol=0.0)
     assert PEAK_RELATIVE_POWER_TRANSFORM_ID == "power_db_to_peak_relative_power_v1"
+
+
+def test_peak_relative_amplitude_recovers_sqrt_of_relative_power() -> None:
+    profile = np.tile(np.linspace(-40.0, 0.0, 601), (2, 1))
+    amplitude = peak_relative_amplitude_from_power_db(profile)
+    power = peak_relative_power_from_db(profile)
+    np.testing.assert_allclose(amplitude * amplitude, power, rtol=1.0e-14, atol=0.0)
+    assert amplitude[:, 0] == pytest.approx(np.full(2, 0.01))
+    assert amplitude.max(axis=1) == pytest.approx(np.ones(2))
+    assert (
+        PEAK_RELATIVE_AMPLITUDE_TRANSFORM_ID
+        == "power_db_to_peak_relative_amplitude_v1"
+    )
 
 
 def test_peak_relative_power_rejects_wrong_shape_and_nonfinite() -> None:

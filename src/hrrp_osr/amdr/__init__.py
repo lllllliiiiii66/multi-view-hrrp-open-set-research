@@ -1,11 +1,15 @@
 """AMDR reference-aligned research components."""
 
 from .data import (
+    CANONICAL_SLOT_ORDER,
+    PEAK_RELATIVE_AMPLITUDE_TRANSFORM_ID,
     PEAK_RELATIVE_POWER_TRANSFORM_ID,
+    RANDOMIZED_SLOT_ORDER,
     TwoViewPair,
     assign_odd_angle_folds,
     build_fold_pairs,
     materialize_pair_views,
+    peak_relative_amplitude_from_power_db,
     peak_relative_power_from_db,
 )
 from .model import (
@@ -16,6 +20,7 @@ from .model import (
     fit_amdr,
     knn_predict_and_score,
     load_amdr_checkpoint,
+    prune_amdr_weight_rows,
     project_views,
     save_amdr_checkpoint,
 )
@@ -25,7 +30,10 @@ __all__ = [
     "AMDRCheckpoint",
     "AMDRFitResult",
     "AMDRModelConfig",
+    "CANONICAL_SLOT_ORDER",
+    "PEAK_RELATIVE_AMPLITUDE_TRANSFORM_ID",
     "PEAK_RELATIVE_POWER_TRANSFORM_ID",
+    "RANDOMIZED_SLOT_ORDER",
     "TwoViewPair",
     "assign_odd_angle_folds",
     "build_fold_pairs",
@@ -33,7 +41,9 @@ __all__ = [
     "knn_predict_and_score",
     "load_amdr_checkpoint",
     "materialize_pair_views",
+    "peak_relative_amplitude_from_power_db",
     "peak_relative_power_from_db",
+    "prune_amdr_weight_rows",
     "project_views",
     "save_amdr_checkpoint",
 ]

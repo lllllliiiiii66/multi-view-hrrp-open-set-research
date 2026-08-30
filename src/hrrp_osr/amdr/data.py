@@ -14,8 +14,12 @@ from hrrp_osr.data.processed import ProcessedBundle
 
 
 PAIR_ALGORITHM_VERSION = "amdr_ordered_cross_frame_balanced_v1"
+CANONICAL_PAIR_ALGORITHM_VERSION = "amdr_canonical_cross_frame_balanced_v1"
+RANDOMIZED_SLOT_ORDER = "randomized_seeded"
+CANONICAL_SLOT_ORDER = "ascending_angle_then_sample_id"
 FOLD_ALGORITHM_VERSION = "odd_angle_five_fold_frame_covered_v1"
 PEAK_RELATIVE_POWER_TRANSFORM_ID = "power_db_to_peak_relative_power_v1"
+PEAK_RELATIVE_AMPLITUDE_TRANSFORM_ID = "power_db_to_peak_relative_amplitude_v1"
 
 
 @dataclass(frozen=True)
@@ -49,10 +53,11 @@ def _pair_id(
     class_name: str,
     view1_sample_id: str,
     view2_sample_id: str,
+    algorithm_version: str,
 ) -> str:
     payload = "\0".join(
         [
-            PAIR_ALGORITHM_VERSION,
+            algorithm_version,
             protocol_id,
             split,
             str(fold_index),
@@ -120,6 +125,7 @@ def _select_balanced_pairs(
     split: str,
     fold_index: int,
     class_name: str,
+    slot_order: str = RANDOMIZED_SLOT_ORDER,
 ) -> tuple[TwoViewPair, ...]:
     if count <= 0:
         raise DataValidationError("pair count must be positive")
@@ -147,6 +153,15 @@ def _select_balanced_pairs(
     right_array = np.asarray(candidate_right, dtype=np.int32)
     available = np.ones(left_array.size, dtype=bool)
     usage = np.zeros(len(ordered), dtype=np.int32)
+    if slot_order not in {RANDOMIZED_SLOT_ORDER, CANONICAL_SLOT_ORDER}:
+        raise DataValidationError(f"unsupported AMDR slot order: {slot_order}")
+    algorithm_version = (
+        PAIR_ALGORITHM_VERSION
+        if slot_order == RANDOMIZED_SLOT_ORDER
+        else CANONICAL_PAIR_ALGORITHM_VERSION
+    )
+    # Keep selection randomness identical between slot-order diagnostics.  The
+    # canonical variant changes only which selected endpoint occupies view1.
     rng = np.random.default_rng(
         _derived_seed(
             PAIR_ALGORITHM_VERSION,
@@ -173,7 +188,10 @@ def _select_balanced_pairs(
         right_index = int(right_array[candidate_index])
         usage[left_index] += 1
         usage[right_index] += 1
-        if int(rng.integers(0, 2)) == 0:
+        slot_coin = int(rng.integers(0, 2))
+        if slot_order == CANONICAL_SLOT_ORDER:
+            view1_index, view2_index = left_index, right_index
+        elif slot_coin == 0:
             view1_index, view2_index = left_index, right_index
         else:
             view1_index, view2_index = right_index, left_index
@@ -190,6 +208,7 @@ def _select_balanced_pairs(
                     class_name=class_name,
                     view1_sample_id=view1_sample_id,
                     view2_sample_id=view2_sample_id,
+                    algorithm_version=algorithm_version,
                 ),
                 split=split,
                 fold_index=fold_index,
@@ -203,6 +222,7 @@ def _select_balanced_pairs(
                 view2_frame_id=int(view2["angle_deg"]) // 15,
                 view1_angle_deg=int(view1["angle_deg"]),
                 view2_angle_deg=int(view2["angle_deg"]),
+                algorithm_version=algorithm_version,
             )
         )
     return tuple(selected)
@@ -216,6 +236,7 @@ def build_fold_pairs(
     fold_count: int,
     base_seed: int,
     pairs_per_class: Mapping[str, int],
+    slot_order: str = RANDOMIZED_SLOT_ORDER,
 ) -> tuple[tuple[TwoViewPair, ...], dict[str, Any]]:
     if fold_index not in range(fold_count):
         raise DataValidationError("fold_index is outside the configured fold range")
@@ -265,6 +286,7 @@ def build_fold_pairs(
                     split=split,
                     fold_index=fold_index,
                     class_name=class_name,
+                    slot_order=slot_order,
                 )
             )
     materialized = tuple(
@@ -286,6 +308,7 @@ def build_fold_pairs(
         },
         "every_fold_covers_all_frames": True,
     }
+    audit["slot_order"] = slot_order
     return materialized, audit
 
 
@@ -398,6 +421,26 @@ def peak_relative_power_from_db(profiles_db: np.ndarray) -> np.ndarray:
     return relative_power
 
 
+def peak_relative_amplitude_from_power_db(profiles_db: np.ndarray) -> np.ndarray:
+    """Convert power dB to per-profile peak-relative linear amplitude.
+
+    The reference AMDR papers define an HRRP bin as the magnitude of a
+    coherent complex echo.  Because TrcsHH stores 10*log10(power), recovering
+    relative amplitude requires dividing the peak-relative dB value by 20.
+    """
+
+    profiles = np.asarray(profiles_db, dtype=np.float64)
+    if profiles.ndim != 2 or profiles.shape[1] != 601:
+        raise DataValidationError("HRRP profiles must have shape [n, 601]")
+    if not np.isfinite(profiles).all():
+        raise DataValidationError("HRRP profiles contain NaN or Inf")
+    shifted = (profiles - profiles.max(axis=1, keepdims=True)) / 20.0
+    relative_amplitude = np.power(10.0, shifted)
+    if not np.isfinite(relative_amplitude).all():
+        raise DataValidationError("relative-amplitude normalization produced NaN or Inf")
+    return relative_amplitude
+
+
 # Compatibility alias for the diagnostic smoke API written before the formal
 # transform received a versioned name.
 relative_power_from_db = peak_relative_power_from_db
@@ -409,12 +452,20 @@ def materialize_pair_views(
     *,
     transform: str = PEAK_RELATIVE_POWER_TRANSFORM_ID,
 ) -> tuple[np.ndarray, np.ndarray]:
-    if transform != PEAK_RELATIVE_POWER_TRANSFORM_ID:
+    if transform not in {
+        PEAK_RELATIVE_POWER_TRANSFORM_ID,
+        PEAK_RELATIVE_AMPLITUDE_TRANSFORM_ID,
+    }:
         raise DataValidationError(f"unsupported AMDR profile transform: {transform}")
     view1_indices = np.asarray([pair.view1_row_index for pair in pairs], dtype=np.int64)
     view2_indices = np.asarray([pair.view2_row_index for pair in pairs], dtype=np.int64)
-    view1 = peak_relative_power_from_db(np.asarray(bundle.profiles[view1_indices]))
-    view2 = peak_relative_power_from_db(np.asarray(bundle.profiles[view2_indices]))
+    transform_function = (
+        peak_relative_power_from_db
+        if transform == PEAK_RELATIVE_POWER_TRANSFORM_ID
+        else peak_relative_amplitude_from_power_db
+    )
+    view1 = transform_function(np.asarray(bundle.profiles[view1_indices]))
+    view2 = transform_function(np.asarray(bundle.profiles[view2_indices]))
     return view1, view2
 
 
