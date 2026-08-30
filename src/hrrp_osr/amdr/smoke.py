@@ -18,12 +18,15 @@ import scipy
 import yaml
 
 from hrrp_osr.amdr.data import (
+    PEAK_RELATIVE_POWER_TRANSFORM_ID,
     TwoViewPair,
     build_fold_pairs,
     materialize_pair_views,
     write_pair_manifest,
 )
 from hrrp_osr.amdr.model import (
+    AMDR_ALGORITHM_VERSION,
+    RELATIVE_STATE_CHANGE,
     AMDRCheckpoint,
     AMDRModelConfig,
     fit_amdr,
@@ -56,12 +59,13 @@ def load_smoke_config(path: str | Path) -> dict[str, Any]:
     errors: list[str] = []
     if int(config.get("schema_version", 0)) != 1:
         errors.append("schema_version must be 1")
-    if (
-        config.get("stage"),
-        config.get("result_scope"),
-        config.get("protocol_family"),
-    ) != ("P0", "diagnostic_smoke", "amdr_odd_even_two_view_crossfit_v1"):
-        errors.append("stage/result_scope/protocol_family do not match P0 smoke")
+    result_scope = str(config.get("result_scope"))
+    if config.get("stage") != "P0" or config.get(
+        "protocol_family"
+    ) != "amdr_odd_even_two_view_crossfit_v1":
+        errors.append("stage/protocol_family do not match the P0 AMDR diagnostic")
+    if result_scope not in {"diagnostic_smoke", "diagnostic_convergence"}:
+        errors.append("result_scope is not an allowed P0 AMDR diagnostic")
     bundle = _mapping(config.get("bundle"), "bundle")
     for name in ("profiles_sha256", "manifest_sha256", "bundle_sha256"):
         value = bundle.get(name)
@@ -93,13 +97,23 @@ def load_smoke_config(path: str | Path) -> dict[str, Any]:
     ):
         errors.append("sampling invariants are invalid")
     preprocessing = _mapping(config.get("preprocessing"), "preprocessing")
-    if preprocessing.get("transform") != "power_db_to_per_profile_relative_power":
+    if preprocessing.get("transform") != PEAK_RELATIVE_POWER_TRANSFORM_ID:
         errors.append("smoke preprocessing transform is invalid")
     model = _mapping(config.get("model"), "model")
-    if model.get("implementation_scope") != "python_translation_smoke_v1":
+    if model.get("algorithm_version") != AMDR_ALGORITHM_VERSION:
+        errors.append("model algorithm_version is invalid")
+    expected_implementation_scope = {
+        "diagnostic_smoke": "amdr_research_v1_diagnostic_budget",
+        "diagnostic_convergence": "amdr_research_v1_convergence_diagnostic",
+    }.get(result_scope)
+    if model.get("implementation_scope") != expected_implementation_scope:
         errors.append("model implementation_scope is invalid")
-    if not 1 <= int(model.get("max_iterations", 0)) <= 5:
-        errors.append("smoke max_iterations must be in 1..5")
+    if model.get("convergence_metric") != RELATIVE_STATE_CHANGE:
+        errors.append("model convergence_metric is invalid")
+    max_iterations = int(model.get("max_iterations", 0))
+    max_allowed = 5 if result_scope == "diagnostic_smoke" else 300
+    if not 1 <= max_iterations <= max_allowed:
+        errors.append(f"max_iterations must be in 1..{max_allowed}")
     if not 1 <= int(model.get("minimum_iterations", 3)) <= int(
         model.get("max_iterations", 0)
     ):
@@ -326,8 +340,14 @@ def run_smoke(
         split: _split_pairs(pairs, split)
         for split in ("train", "calibration", "test")
     }
+    preprocessing = _mapping(config["preprocessing"], "preprocessing")
+    profile_transform = str(preprocessing["transform"])
     split_views = {
-        split: materialize_pair_views(bundle, split_pairs[split])
+        split: materialize_pair_views(
+            bundle,
+            split_pairs[split],
+            transform=profile_transform,
+        )
         for split in split_pairs
     }
     known_classes = tuple(sorted(bundle.known_classes))
@@ -350,6 +370,9 @@ def run_smoke(
         solve_ridge=float(model_raw["solve_ridge"]),
         initialization_seed=int(model_raw["initialization_seed"]),
         minimum_iterations=int(model_raw.get("minimum_iterations", 3)),
+        convergence_metric=str(
+            model_raw.get("convergence_metric", "relative_state_change_v1")
+        ),
     )
     checkpoint_raw = _mapping(config.get("checkpoint", {}), "checkpoint")
     checkpoint_every = int(checkpoint_raw.get("every_iterations", 0))
@@ -366,7 +389,8 @@ def run_smoke(
         )
         is_converged = (
             checkpoint.iteration_completed >= model_config.minimum_iterations
-            and float(checkpoint.history[-1]["delta"]) < model_config.tolerance
+            and float(checkpoint.history[-1]["convergence_value"])
+            < model_config.tolerance
         )
         if (
             checkpoint.iteration_completed % checkpoint_every == 0
@@ -411,11 +435,11 @@ def run_smoke(
     )
     metrics.update(
         {
-            "result_scope": "diagnostic_smoke",
+            "result_scope": str(config["result_scope"]),
             "formal_experiment": False,
             "fold_index": int(protocol["fold_index"]),
             "iterations_ran": len(fit.history),
-            "converged_within_smoke_budget": fit.converged,
+            "converged_within_configured_budget": fit.converged,
             "optimization_stop_reason": fit.stop_reason,
             "resumed_from_iteration": (
                 resume_checkpoint.iteration_completed
@@ -436,7 +460,7 @@ def run_smoke(
             "pair_counts": {
                 split: len(split_pairs[split]) for split in split_pairs
             },
-            "base_profile_transform": config["preprocessing"]["transform"],
+            "base_profile_transform": profile_transform,
         }
     )
     _write_json(destination / "metrics.json", metrics)

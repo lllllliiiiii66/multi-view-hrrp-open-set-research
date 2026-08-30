@@ -13,6 +13,11 @@ from scipy.linalg import block_diag
 from hrrp_osr.data.errors import DataValidationError
 
 
+AMDR_ALGORITHM_VERSION = "amdr_research_v1"
+RELATIVE_STATE_CHANGE = "relative_state_change_v1"
+ABSOLUTE_STATE_DELTA = "absolute_state_delta_v1"
+
+
 @dataclass(frozen=True)
 class AMDRModelConfig:
     lambda_manifold: float
@@ -23,6 +28,7 @@ class AMDRModelConfig:
     solve_ridge: float
     initialization_seed: int
     minimum_iterations: int = 3
+    convergence_metric: str = RELATIVE_STATE_CHANGE
 
 
 @dataclass(frozen=True)
@@ -92,6 +98,11 @@ def _validate_fit_inputs(
         errors.append("minimum_iterations must be within 1..max_iterations")
     if config.numerical_epsilon <= 0 or config.solve_ridge <= 0:
         errors.append("numerical stabilizers must be positive")
+    if config.convergence_metric not in {
+        RELATIVE_STATE_CHANGE,
+        ABSOLUTE_STATE_DELTA,
+    }:
+        errors.append("unsupported AMDR convergence metric")
     if errors:
         raise DataValidationError("Invalid AMDR fit input:\n- " + "\n- ".join(errors))
     return materialized, y, int(unique.size)
@@ -122,6 +133,8 @@ def _config_signature(config: AMDRModelConfig) -> dict[str, Any]:
         "solve_ridge": config.solve_ridge,
         "initialization_seed": config.initialization_seed,
         "minimum_iterations": config.minimum_iterations,
+        "algorithm_version": AMDR_ALGORITHM_VERSION,
+        "convergence_metric": config.convergence_metric,
     }
 
 
@@ -388,7 +401,7 @@ def fit_amdr(
     converged = bool(
         history
         and start_iteration >= config.minimum_iterations
-        and float(history[-1]["delta"]) < config.tolerance
+        and float(history[-1]["convergence_value"]) < config.tolerance
     )
 
     for iteration in range(start_iteration, config.max_iterations):
@@ -449,6 +462,7 @@ def fit_amdr(
         if not np.isfinite(weights).all():
             raise DataValidationError("AMDR W update produced NaN or Inf")
 
+        manifold_raw = 0.0
         for view_index, view in enumerate(materialized):
             projected = view @ weights[slices[view_index]]
             for label, indices in enumerate(class_indices):
@@ -458,8 +472,12 @@ def fit_amdr(
                 inverse = 1.0 / (distances + config.numerical_epsilon)
                 np.fill_diagonal(inverse, 0.0)
                 row_sums = inverse.sum(axis=1, keepdims=True)
-                graphs[view_index][label] = inverse / np.maximum(
+                updated_graph = inverse / np.maximum(
                     row_sums, config.numerical_epsilon
+                )
+                graphs[view_index][label] = updated_graph
+                manifold_raw += len(indices) * float(
+                    np.sum(updated_graph * updated_graph * distances)
                 )
         alpha = _alpha_from_weights(
             weights,
@@ -472,18 +490,59 @@ def fit_amdr(
             for v in range(len(graphs))
             for c in range(class_count)
         )
-        delta = (
-            float(np.sum((weights - old_weights) ** 2))
-            + graph_delta
-            + float(np.sum((adjusted_target - old_target) ** 2))
-            + float(np.sum((alpha - old_alpha) ** 2))
+        weight_delta = float(np.sum((weights - old_weights) ** 2))
+        target_delta = float(np.sum((adjusted_target - old_target) ** 2))
+        alpha_delta = float(np.sum((alpha - old_alpha) ** 2))
+        absolute_delta = weight_delta + graph_delta + target_delta + alpha_delta
+        old_graph_norm = sum(
+            float(np.sum(old_graphs[v][c] ** 2))
+            for v in range(len(old_graphs))
+            for c in range(class_count)
         )
+        relative_delta = (
+            weight_delta
+            / max(float(np.sum(old_weights * old_weights)), config.numerical_epsilon)
+            + graph_delta / max(old_graph_norm, config.numerical_epsilon)
+            + target_delta
+            / max(float(np.sum(old_target * old_target)), config.numerical_epsilon)
+            + alpha_delta
+            / max(float(np.sum(old_alpha * old_alpha)), config.numerical_epsilon)
+        )
+        convergence_value = (
+            relative_delta
+            if config.convergence_metric == RELATIVE_STATE_CHANGE
+            else absolute_delta
+        )
+        regression_loss = float(
+            np.sum((combined @ weights - adjusted_target) ** 2)
+        )
+        sparse_raw = sum(
+            float(np.sum(np.linalg.norm(weights[view_slice], axis=1)))
+            / max(float(alpha[view_index]), config.numerical_epsilon)
+            for view_index, view_slice in enumerate(slices)
+        )
+        manifold_loss = config.lambda_manifold * manifold_raw
+        sparse_loss = config.lambda_sparse * sparse_raw
+        objective = regression_loss + manifold_loss + sparse_loss
+        if not np.isfinite(objective) or not np.isfinite(convergence_value):
+            raise DataValidationError("AMDR convergence diagnostic is NaN or Inf")
+        previous_objective = float(history[-1]["objective"]) if history else None
         history.append(
             {
                 "iteration": iteration + 1,
-                "delta": delta,
+                "delta": absolute_delta,
+                "relative_state_change": relative_delta,
+                "convergence_metric": config.convergence_metric,
+                "convergence_value": convergence_value,
                 "weight_frobenius_norm": float(np.linalg.norm(weights)),
                 "alpha": alpha.tolist(),
+                "objective": objective,
+                "objective_regression": regression_loss,
+                "objective_manifold": manifold_loss,
+                "objective_sparse": sparse_loss,
+                "objective_change": (
+                    None if previous_objective is None else objective - previous_objective
+                ),
             }
         )
         if checkpoint_callback is not None:
@@ -501,7 +560,10 @@ def fit_amdr(
                 config=config,
             )
             checkpoint_callback(checkpoint)
-        if iteration + 1 >= config.minimum_iterations and delta < config.tolerance:
+        if (
+            iteration + 1 >= config.minimum_iterations
+            and convergence_value < config.tolerance
+        ):
             converged = True
             break
 

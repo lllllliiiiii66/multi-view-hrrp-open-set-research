@@ -1,7 +1,7 @@
 schema_version: 1
-protocol_id: amdr_10class_odd_even_crossfit_smoke_v1
+protocol_id: amdr_10class_odd_even_crossfit_convergence_fold0_v1
 stage: P0
-result_scope: diagnostic_smoke
+result_scope: diagnostic_convergence
 protocol_family: amdr_odd_even_two_view_crossfit_v1
 
 bundle:
@@ -48,11 +48,12 @@ preprocessing:
 
 model:
   algorithm_version: amdr_research_v1
-  implementation_scope: amdr_research_v1_diagnostic_budget
+  implementation_scope: amdr_research_v1_convergence_diagnostic
+  reference_role: structural_reference_only_not_numerical_reproduction
   view_count: 2
   lambda_manifold: 0.01
   lambda_sparse: 0.01
-  max_iterations: 3
+  max_iterations: 300
   minimum_iterations: 3
   tolerance: 3.0e-5
   convergence_metric: relative_state_change_v1
@@ -61,7 +62,13 @@ model:
   initialization_seed: 20260830
   l21_reweighting: update_each_iteration
   graph_storage: exact_class_blocks
-  reference_role: structural_reference_only_not_numerical_reproduction
+
+checkpoint:
+  strategy: latest_only_atomic_replace
+  every_iterations: 5
+  selection: none_no_validation_best
+  includes_alternating_state: true
+  resume_requires_same_data_order_and_model_config: true
 
 knn:
   k: 3

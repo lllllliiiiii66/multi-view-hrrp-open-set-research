@@ -61,6 +61,18 @@ def test_amdr_fit_project_and_knn_smoke_are_finite_and_directional() -> None:
     assert np.isfinite(fit.weights).all()
     assert len(fit.history) == 3
     assert fit.stop_reason == "max_iterations"
+    assert all(row["objective"] > 0.0 for row in fit.history)
+    assert all(row["relative_state_change"] >= 0.0 for row in fit.history)
+    assert all(
+        row["convergence_value"] == row["relative_state_change"]
+        for row in fit.history
+    )
+    for row in fit.history:
+        assert row["objective"] == pytest.approx(
+            row["objective_regression"]
+            + row["objective_manifold"]
+            + row["objective_sparse"]
+        )
 
     train_projection = project_views(train_views, fit)
     known_views, known_labels = _synthetic_views(2, 4)
@@ -138,4 +150,23 @@ def test_latest_checkpoint_resume_matches_uninterrupted_fit(tmp_path) -> None:
             train_labels,
             config(5),
             resume_checkpoint=loaded,
+        )
+
+
+def test_amdr_rejects_unknown_convergence_metric() -> None:
+    train_views, train_labels = _synthetic_views(5, 4)
+    with pytest.raises(DataValidationError, match="convergence metric"):
+        fit_amdr(
+            train_views,
+            train_labels,
+            AMDRModelConfig(
+                lambda_manifold=0.01,
+                lambda_sparse=0.01,
+                max_iterations=3,
+                tolerance=1.0e-5,
+                numerical_epsilon=1.0e-10,
+                solve_ridge=1.0e-6,
+                initialization_seed=3,
+                convergence_metric="unknown",
+            ),
         )

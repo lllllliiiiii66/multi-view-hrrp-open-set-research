@@ -6,10 +6,12 @@ import numpy as np
 import pytest
 
 from hrrp_osr.amdr.data import (
+    PEAK_RELATIVE_POWER_TRANSFORM_ID,
     _select_balanced_pairs,
     assign_odd_angle_folds,
-    relative_power_from_db,
+    peak_relative_power_from_db,
 )
+from hrrp_osr.data.errors import DataValidationError
 
 
 def test_odd_angle_folds_are_equal_and_cover_every_frame() -> None:
@@ -71,10 +73,27 @@ def test_balanced_pair_sampling_is_reproducible_cross_frame_and_unique() -> None
     assert {pair.view2_frame_id for pair in first}
 
 
-def test_relative_power_normalization_matches_power_db_definition() -> None:
+def test_peak_relative_power_matches_power_db_definition() -> None:
     profile = np.tile(np.linspace(-20.0, 0.0, 601), (2, 1))
-    relative = relative_power_from_db(profile)
+    relative = peak_relative_power_from_db(profile)
     assert relative.shape == (2, 601)
     assert np.max(relative, axis=1) == pytest.approx(np.ones(2))
     assert relative[:, 0] == pytest.approx(np.full(2, 0.01))
     assert np.isfinite(relative).all()
+
+
+def test_peak_relative_power_is_invariant_to_profile_db_offset() -> None:
+    profile = np.tile(np.linspace(-40.0, 10.0, 601), (2, 1))
+    transformed = peak_relative_power_from_db(profile)
+    shifted = peak_relative_power_from_db(profile + np.asarray([[17.0], [-9.0]]))
+    np.testing.assert_allclose(shifted, transformed, rtol=1.0e-14, atol=0.0)
+    assert PEAK_RELATIVE_POWER_TRANSFORM_ID == "power_db_to_peak_relative_power_v1"
+
+
+def test_peak_relative_power_rejects_wrong_shape_and_nonfinite() -> None:
+    with pytest.raises(DataValidationError, match="shape"):
+        peak_relative_power_from_db(np.zeros((2, 600)))
+    invalid = np.zeros((2, 601))
+    invalid[0, 0] = np.nan
+    with pytest.raises(DataValidationError, match="NaN or Inf"):
+        peak_relative_power_from_db(invalid)

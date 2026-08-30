@@ -15,6 +15,7 @@ from hrrp_osr.data.processed import ProcessedBundle
 
 PAIR_ALGORITHM_VERSION = "amdr_ordered_cross_frame_balanced_v1"
 FOLD_ALGORITHM_VERSION = "odd_angle_five_fold_frame_covered_v1"
+PEAK_RELATIVE_POWER_TRANSFORM_ID = "power_db_to_peak_relative_power_v1"
 
 
 @dataclass(frozen=True)
@@ -377,7 +378,14 @@ def validate_fold_pairs(
     }
 
 
-def relative_power_from_db(profiles_db: np.ndarray) -> np.ndarray:
+def peak_relative_power_from_db(profiles_db: np.ndarray) -> np.ndarray:
+    """Convert power dB to per-profile peak-relative linear power.
+
+    TrcsHH is 10*log10(power), so subtracting the profile peak in dB before
+    linearization is exactly power / max(power).  The transform is fitted to
+    no population and therefore cannot transfer statistics across splits.
+    """
+
     profiles = np.asarray(profiles_db, dtype=np.float64)
     if profiles.ndim != 2 or profiles.shape[1] != 601:
         raise DataValidationError("HRRP profiles must have shape [n, 601]")
@@ -390,14 +398,23 @@ def relative_power_from_db(profiles_db: np.ndarray) -> np.ndarray:
     return relative_power
 
 
+# Compatibility alias for the diagnostic smoke API written before the formal
+# transform received a versioned name.
+relative_power_from_db = peak_relative_power_from_db
+
+
 def materialize_pair_views(
     bundle: ProcessedBundle,
     pairs: Sequence[TwoViewPair],
+    *,
+    transform: str = PEAK_RELATIVE_POWER_TRANSFORM_ID,
 ) -> tuple[np.ndarray, np.ndarray]:
+    if transform != PEAK_RELATIVE_POWER_TRANSFORM_ID:
+        raise DataValidationError(f"unsupported AMDR profile transform: {transform}")
     view1_indices = np.asarray([pair.view1_row_index for pair in pairs], dtype=np.int64)
     view2_indices = np.asarray([pair.view2_row_index for pair in pairs], dtype=np.int64)
-    view1 = relative_power_from_db(np.asarray(bundle.profiles[view1_indices]))
-    view2 = relative_power_from_db(np.asarray(bundle.profiles[view2_indices]))
+    view1 = peak_relative_power_from_db(np.asarray(bundle.profiles[view1_indices]))
+    view2 = peak_relative_power_from_db(np.asarray(bundle.profiles[view2_indices]))
     return view1, view2
 
 

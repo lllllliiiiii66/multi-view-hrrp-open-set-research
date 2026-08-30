@@ -40,25 +40,28 @@ sampling:
 
 preprocessing:
   source_representation: power_decibel
-  transform: power_db_to_per_profile_relative_power
+  transform: power_db_to_peak_relative_power_v1
   formula: 10 ** ((x_db - max(x_db)) / 10)
   output_max_per_profile: 1.0
-  status: smoke_only_not_formal_preprocessing
+  fit_population: none_per_profile_deterministic
+  status: frozen_for_amdr_research_v1
 
 model:
-  implementation_scope: python_translation_smoke_v1
+  algorithm_version: amdr_research_v1
+  implementation_scope: amdr_research_v1_diagnostic_budget
   view_count: 2
   lambda_manifold: 0.01
   lambda_sparse: 0.01
   max_iterations: 3
   minimum_iterations: 3
   tolerance: 3.0e-5
+  convergence_metric: relative_state_change_v1
   numerical_epsilon: 1.0e-10
   solve_ridge: 1.0e-6
   initialization_seed: 20260830
   l21_reweighting: update_each_iteration
   graph_storage: exact_class_blocks
-  formal_paper_reproduction: false
+  reference_role: structural_reference_only_not_numerical_reproduction
 
 checkpoint:
   strategy: latest_only_atomic_replace

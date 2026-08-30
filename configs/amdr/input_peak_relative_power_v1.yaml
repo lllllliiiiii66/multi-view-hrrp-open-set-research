@@ -1,0 +1,45 @@
+schema_version: 1
+transform_id: power_db_to_peak_relative_power_v1
+stage: P0
+status: frozen_for_amdr_research_v1
+
+input:
+  dataset_id: hrrp_10class_theta83_hh_v1
+  preprocessing_id: hrrp_padding_complex_gaussian_v1
+  profile_field: TrcsHH
+  representation: power_decibel
+  db_definition: 10_log10_power
+  profile_length: 601
+  profiles_sha256: 2dd92282c125f0f677cf1f2dfce828781c8ba4385cf9ae552c4a2c56033c3f5b
+  manifest_sha256: 748b9f30629c3b3cbe66c6a1dac30863fdab2d81a214e46d8bc3ef7c6022a08a
+  bundle_sha256: 79176091b5b745e5df5957f1bb4ade7304c1403a4a32e64622e012db67d5a0c5
+
+transform:
+  formula: 10 ** ((x_db - max(x_db, axis=range_bin)) / 10)
+  equivalent_linear_power_formula: power / max(power, axis=range_bin)
+  applied_independently_per_profile: true
+  fit_population: none
+  output_representation: peak_relative_linear_power
+  output_dtype: float64
+  output_min_inclusive: 0.0
+  output_max_per_profile: 1.0
+  additional_centering_or_standardization: none
+
+ordering:
+  - materialize_fixed_minus_140_db_complex_gaussian_padding
+  - convert_complete_601_bin_profile_to_peak_relative_linear_power
+  - construct_ordered_two_view_samples
+
+selection_boundary:
+  unknown_or_test_metrics_used: false
+  population_statistics_used: false
+  rationale:
+    - TrcsHH_is_verified_power_decibel
+    - removes_profile_wide_db_offset_and_suppresses_amplitude_sensitivity
+    - matches_the_unit_peak_scale_observed_in_the_reference_ship_training_bundle
+    - bounded_input_scale_improves_AMDR_linear_system_conditioning
+
+accepted_risk:
+  risk_id: profile_length_role_shortcut_v1
+  status: accepted_for_first_round
+  note: peak_normalization_does_not_remove_the_detectable_padding_boundary
