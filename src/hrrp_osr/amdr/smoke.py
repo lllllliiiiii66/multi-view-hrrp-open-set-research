@@ -30,8 +30,10 @@ from hrrp_osr.amdr.data import (
 from hrrp_osr.amdr.model import (
     ALLOW_SAME_BASE_GRAPH,
     AMDR_ALGORITHM_VERSION,
+    COMPLETE_SAME_CLASS_GRAPH,
     EXCLUDE_SAME_BASE_GRAPH,
     FIXED_INITIAL_L21_REWEIGHTING,
+    LOCAL_KNN_GAUSSIAN_GRAPH,
     RELATIVE_STATE_CHANGE,
     UPDATE_EACH_ITERATION_L21_REWEIGHTING,
     AMDRCheckpoint,
@@ -153,6 +155,7 @@ def load_smoke_config(path: str | Path) -> dict[str, Any]:
         "diagnostic_pilot": {
             "amdr_research_v1_pilot",
             "amdr_research_v1_alignment_diagnostic",
+            "amdr_research_v1_local_graph_diagnostic",
             "amdr_research_v1_overfit_diagnostic",
         },
     }.get(result_scope)
@@ -170,6 +173,13 @@ def load_smoke_config(path: str | Path) -> dict[str, Any]:
         EXCLUDE_SAME_BASE_GRAPH,
     }:
         errors.append("model graph_same_base_policy is invalid")
+    if model.get("graph_neighborhood", COMPLETE_SAME_CLASS_GRAPH) not in {
+        COMPLETE_SAME_CLASS_GRAPH,
+        LOCAL_KNN_GAUSSIAN_GRAPH,
+    }:
+        errors.append("model graph_neighborhood is invalid")
+    if int(model.get("graph_neighbor_count", 10)) < 1:
+        errors.append("model.graph_neighbor_count must be positive")
     if model.get(
         "l21_reweighting", UPDATE_EACH_ITERATION_L21_REWEIGHTING
     ) not in {
@@ -491,6 +501,10 @@ def run_smoke(
         graph_same_base_policy=str(
             model_raw.get("graph_same_base_policy", ALLOW_SAME_BASE_GRAPH)
         ),
+        graph_neighborhood=str(
+            model_raw.get("graph_neighborhood", COMPLETE_SAME_CLASS_GRAPH)
+        ),
+        graph_neighbor_count=int(model_raw.get("graph_neighbor_count", 10)),
         l21_reweighting=str(
             model_raw.get(
                 "l21_reweighting", UPDATE_EACH_ITERATION_L21_REWEIGHTING
@@ -618,6 +632,8 @@ def run_smoke(
                 else pca_model.cumulative_explained_variance
             ),
             "graph_same_base_policy": model_config.graph_same_base_policy,
+            "graph_neighborhood": model_config.graph_neighborhood,
+            "graph_neighbor_count": model_config.graph_neighbor_count,
             "l21_reweighting": model_config.l21_reweighting,
             "post_training_row_prune_squared_norm_threshold": row_prune_threshold,
             "pruned_weight_row_count": pruned_weight_row_count,

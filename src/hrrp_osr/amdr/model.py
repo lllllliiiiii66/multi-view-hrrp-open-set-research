@@ -18,6 +18,8 @@ RELATIVE_STATE_CHANGE = "relative_state_change_v1"
 ABSOLUTE_STATE_DELTA = "absolute_state_delta_v1"
 ALLOW_SAME_BASE_GRAPH = "allow_same_base_v1"
 EXCLUDE_SAME_BASE_GRAPH = "exclude_same_base_v1"
+COMPLETE_SAME_CLASS_GRAPH = "complete_same_class_inverse_distance_v1"
+LOCAL_KNN_GAUSSIAN_GRAPH = "local_knn_gaussian_v1"
 FIXED_INITIAL_L21_REWEIGHTING = "fixed_initial"
 UPDATE_EACH_ITERATION_L21_REWEIGHTING = "update_each_iteration"
 
@@ -34,6 +36,8 @@ class AMDRModelConfig:
     minimum_iterations: int = 3
     convergence_metric: str = RELATIVE_STATE_CHANGE
     graph_same_base_policy: str = ALLOW_SAME_BASE_GRAPH
+    graph_neighborhood: str = COMPLETE_SAME_CLASS_GRAPH
+    graph_neighbor_count: int = 10
     l21_reweighting: str = UPDATE_EACH_ITERATION_L21_REWEIGHTING
 
 
@@ -114,6 +118,13 @@ def _validate_fit_inputs(
         EXCLUDE_SAME_BASE_GRAPH,
     }:
         errors.append("unsupported same-base graph policy")
+    if config.graph_neighborhood not in {
+        COMPLETE_SAME_CLASS_GRAPH,
+        LOCAL_KNN_GAUSSIAN_GRAPH,
+    }:
+        errors.append("unsupported graph neighborhood")
+    if config.graph_neighbor_count < 1:
+        errors.append("graph_neighbor_count must be positive")
     if config.l21_reweighting not in {
         FIXED_INITIAL_L21_REWEIGHTING,
         UPDATE_EACH_ITERATION_L21_REWEIGHTING,
@@ -165,6 +176,9 @@ def _config_signature(config: AMDRModelConfig) -> dict[str, Any]:
     # same-base exclusion policy existed.
     if config.graph_same_base_policy != ALLOW_SAME_BASE_GRAPH:
         signature["graph_same_base_policy"] = config.graph_same_base_policy
+    if config.graph_neighborhood != COMPLETE_SAME_CLASS_GRAPH:
+        signature["graph_neighborhood"] = config.graph_neighborhood
+        signature["graph_neighbor_count"] = config.graph_neighbor_count
     if config.l21_reweighting != UPDATE_EACH_ITERATION_L21_REWEIGHTING:
         signature["l21_reweighting"] = config.l21_reweighting
     return signature
@@ -275,14 +289,55 @@ def _graph_exclusion_mask(group_ids: np.ndarray | None, count: int) -> np.ndarra
     return group_ids[:, None] == group_ids[None, :]
 
 
+def _local_knn_gaussian_graph(
+    squared_distances: np.ndarray,
+    *,
+    neighbor_count: int,
+    exclusion_mask: np.ndarray,
+    epsilon: float,
+) -> np.ndarray:
+    """Build a directed row-normalized local graph from squared distances.
+
+    ``pairwise_squared_distances`` already returns squared Euclidean distance.
+    The row-local median therefore estimates sigma squared and must not be
+    squared a second time in the Gaussian exponent.
+    """
+
+    distances = np.asarray(squared_distances, dtype=np.float64).copy()
+    if distances.ndim != 2 or distances.shape[0] != distances.shape[1]:
+        raise DataValidationError("local graph distances must be square")
+    count = distances.shape[0]
+    distances[exclusion_mask] = np.inf
+    available = np.sum(~exclusion_mask, axis=1)
+    if np.any(available < 1):
+        raise DataValidationError("local graph left a sample without a neighbor")
+    effective_k = min(int(neighbor_count), int(available.min()))
+    neighbor_indices = np.argsort(
+        distances, axis=1, kind="stable"
+    )[:, :effective_k]
+    neighbor_distances = np.take_along_axis(
+        distances, neighbor_indices, axis=1
+    )
+    sigma_squared = np.maximum(
+        np.median(neighbor_distances, axis=1), epsilon
+    )
+    exponent = neighbor_distances / (2.0 * sigma_squared[:, None])
+    weights = np.exp(-np.minimum(exponent, 700.0))
+    graph = np.zeros((count, count), dtype=np.float64)
+    graph[np.arange(count)[:, None], neighbor_indices] = weights
+    graph /= np.maximum(graph.sum(axis=1, keepdims=True), epsilon)
+    return graph
+
+
 def _initialize_class_graphs(
+    views: Sequence[np.ndarray],
     labels: np.ndarray,
     class_count: int,
-    view_count: int,
     view_group_ids: tuple[np.ndarray, ...] | None,
+    config: AMDRModelConfig,
 ) -> list[list[np.ndarray]]:
     graphs: list[list[np.ndarray]] = []
-    for view_index in range(view_count):
+    for view_index, view in enumerate(views):
         view_graphs: list[np.ndarray] = []
         for label in range(class_count):
             indices = np.flatnonzero(labels == label)
@@ -293,13 +348,22 @@ def _initialize_class_graphs(
                 if view_group_ids is None
                 else view_group_ids[view_index][indices]
             )
-            graph[_graph_exclusion_mask(class_group_ids, count)] = 0.0
-            row_sums = graph.sum(axis=1, keepdims=True)
-            if np.any(row_sums <= 0.0):
-                raise DataValidationError(
-                    "same-base graph exclusion left a sample without a neighbor"
+            exclusion_mask = _graph_exclusion_mask(class_group_ids, count)
+            if config.graph_neighborhood == LOCAL_KNN_GAUSSIAN_GRAPH:
+                graph = _local_knn_gaussian_graph(
+                    pairwise_squared_distances(view[indices], view[indices]),
+                    neighbor_count=config.graph_neighbor_count,
+                    exclusion_mask=exclusion_mask,
+                    epsilon=config.numerical_epsilon,
                 )
-            graph /= row_sums
+            else:
+                graph[exclusion_mask] = 0.0
+                row_sums = graph.sum(axis=1, keepdims=True)
+                if np.any(row_sums <= 0.0):
+                    raise DataValidationError(
+                        "same-base graph exclusion left a sample without a neighbor"
+                    )
+                graph /= row_sums
             view_graphs.append(graph)
         graphs.append(view_graphs)
     return graphs
@@ -471,10 +535,11 @@ def fit_amdr(
         weights = initial_weights.copy()
         alpha = np.full(len(materialized), 1.0 / len(materialized), dtype=np.float64)
         graphs = _initialize_class_graphs(
+            materialized,
             y,
             class_count,
-            len(materialized),
             materialized_group_ids,
+            config,
         )
         history: list[dict[str, Any]] = []
         start_iteration = 0
@@ -571,23 +636,32 @@ def fit_amdr(
                 distances = pairwise_squared_distances(
                     projected[indices], projected[indices]
                 )
-                inverse = 1.0 / (distances + config.numerical_epsilon)
                 class_group_ids = (
                     None
                     if materialized_group_ids is None
                     else materialized_group_ids[view_index][indices]
                 )
-                inverse[
-                    _graph_exclusion_mask(class_group_ids, len(indices))
-                ] = 0.0
-                row_sums = inverse.sum(axis=1, keepdims=True)
-                if np.any(row_sums <= 0.0):
-                    raise DataValidationError(
-                        "AMDR graph update left a sample without a neighbor"
-                    )
-                updated_graph = inverse / np.maximum(
-                    row_sums, config.numerical_epsilon
+                exclusion_mask = _graph_exclusion_mask(
+                    class_group_ids, len(indices)
                 )
+                if config.graph_neighborhood == LOCAL_KNN_GAUSSIAN_GRAPH:
+                    updated_graph = _local_knn_gaussian_graph(
+                        distances,
+                        neighbor_count=config.graph_neighbor_count,
+                        exclusion_mask=exclusion_mask,
+                        epsilon=config.numerical_epsilon,
+                    )
+                else:
+                    inverse = 1.0 / (distances + config.numerical_epsilon)
+                    inverse[exclusion_mask] = 0.0
+                    row_sums = inverse.sum(axis=1, keepdims=True)
+                    if np.any(row_sums <= 0.0):
+                        raise DataValidationError(
+                            "AMDR graph update left a sample without a neighbor"
+                        )
+                    updated_graph = inverse / np.maximum(
+                        row_sums, config.numerical_epsilon
+                    )
                 graphs[view_index][label] = updated_graph
                 manifold_raw += len(indices) * float(
                     np.sum(updated_graph * updated_graph * distances)
@@ -646,6 +720,8 @@ def fit_amdr(
                 "delta": absolute_delta,
                 "relative_state_change": relative_delta,
                 "convergence_metric": config.convergence_metric,
+                "graph_neighborhood": config.graph_neighborhood,
+                "graph_neighbor_count": config.graph_neighbor_count,
                 "l21_reweighting": config.l21_reweighting,
                 "convergence_value": convergence_value,
                 "weight_frobenius_norm": float(np.linalg.norm(weights)),

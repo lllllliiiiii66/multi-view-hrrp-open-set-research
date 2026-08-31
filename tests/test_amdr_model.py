@@ -7,6 +7,7 @@ from hrrp_osr.data.errors import DataValidationError
 from hrrp_osr.amdr.model import (
     EXCLUDE_SAME_BASE_GRAPH,
     FIXED_INITIAL_L21_REWEIGHTING,
+    LOCAL_KNN_GAUSSIAN_GRAPH,
     AMDRFitResult,
     AMDRModelConfig,
     fit_amdr,
@@ -259,6 +260,56 @@ def test_amdr_rejects_unknown_l21_reweighting_policy() -> None:
                 solve_ridge=1.0e-6,
                 initialization_seed=43,
                 l21_reweighting="unknown",
+            ),
+        )
+
+
+def test_local_knn_graph_is_row_normalized_and_nonzero_in_first_iteration() -> None:
+    train_views, train_labels = _synthetic_views(47, 5)
+    checkpoints = []
+    fit = fit_amdr(
+        train_views,
+        train_labels,
+        AMDRModelConfig(
+            lambda_manifold=1.0,
+            lambda_sparse=1.0,
+            max_iterations=1,
+            minimum_iterations=1,
+            tolerance=1.0e-30,
+            numerical_epsilon=1.0e-10,
+            solve_ridge=1.0e-6,
+            initialization_seed=53,
+            graph_neighborhood=LOCAL_KNN_GAUSSIAN_GRAPH,
+            graph_neighbor_count=2,
+        ),
+        checkpoint_callback=checkpoints.append,
+    )
+
+    assert fit.history[0]["objective_manifold"] > 0.0
+    for view_graphs in checkpoints[-1].graphs:
+        for graph in view_graphs:
+            np.testing.assert_allclose(graph.sum(axis=1), np.ones(5))
+            np.testing.assert_array_equal(np.diag(graph), np.zeros(5))
+            np.testing.assert_array_equal(
+                np.count_nonzero(graph, axis=1), np.full(5, 2)
+            )
+
+
+def test_amdr_rejects_invalid_local_graph_configuration() -> None:
+    train_views, train_labels = _synthetic_views(59, 4)
+    with pytest.raises(DataValidationError, match="graph neighborhood"):
+        fit_amdr(
+            train_views,
+            train_labels,
+            AMDRModelConfig(
+                lambda_manifold=1.0,
+                lambda_sparse=1.0,
+                max_iterations=2,
+                tolerance=1.0e-5,
+                numerical_epsilon=1.0e-10,
+                solve_ridge=1.0e-6,
+                initialization_seed=61,
+                graph_neighborhood="unknown",
             ),
         )
 

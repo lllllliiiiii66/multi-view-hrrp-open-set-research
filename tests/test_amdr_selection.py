@@ -29,6 +29,22 @@ def test_selection_config_uses_calibration_and_never_test() -> None:
     assert selection["knn_k"] == 3
 
 
+def test_local_graph_lambda2_selection_is_fixed_d_and_bounded() -> None:
+    config = load_selection_config(
+        PROJECT_ROOT
+        / "configs"
+        / "amdr"
+        / "pilot_fold0_local_knn_lambda2_selection_v1.yaml"
+    )
+    selection = config["selection"]
+    assert selection["l21_reweighting"] == [FIXED_INITIAL_L21_REWEIGHTING]
+    assert selection["lambda_manifold"] == [1.0]
+    assert selection["lambda_sparse"] == list(range(1, 11))
+    assert selection["boundary_rule"] == (
+        "report_boundary_without_automatic_extension"
+    )
+
+
 def test_select_best_candidates_uses_registered_tie_breaks() -> None:
     rows = []
     for strategy in (

@@ -21,6 +21,7 @@ from hrrp_osr.amdr.data import (
 )
 from hrrp_osr.amdr.model import (
     ALLOW_SAME_BASE_GRAPH,
+    COMPLETE_SAME_CLASS_GRAPH,
     EXCLUDE_SAME_BASE_GRAPH,
     FIXED_INITIAL_L21_REWEIGHTING,
     UPDATE_EACH_ITERATION_L21_REWEIGHTING,
@@ -109,8 +110,13 @@ def load_selection_config(path: str | Path) -> dict[str, Any]:
         errors.append("secondary metric must be calibration_macro_f1")
     if int(selection.get("knn_k", 0)) != 3:
         errors.append("selection KNN k must remain 3")
-    if tuple(selection.get("l21_reweighting", ())) != SUPPORTED_REWEIGHTING:
-        errors.append("selection must compare fixed_initial then update_each_iteration")
+    selected_reweighting = tuple(selection.get("l21_reweighting", ()))
+    if (
+        not selected_reweighting
+        or len(set(selected_reweighting)) != len(selected_reweighting)
+        or any(value not in SUPPORTED_REWEIGHTING for value in selected_reweighting)
+    ):
+        errors.append("selection l21_reweighting must be a unique supported subset")
     expected_ties = (
         "higher_calibration_accuracy",
         "higher_calibration_macro_f1",
@@ -119,9 +125,10 @@ def load_selection_config(path: str | Path) -> dict[str, Any]:
     )
     if tuple(selection.get("tie_break_order", ())) != expected_ties:
         errors.append("tie-break order changed")
-    if selection.get("boundary_rule") != (
-        "extend_once_before_test_if_selected_lambda_is_grid_boundary"
-    ):
+    if selection.get("boundary_rule") not in {
+        "extend_once_before_test_if_selected_lambda_is_grid_boundary",
+        "report_boundary_without_automatic_extension",
+    }:
         errors.append("boundary rule changed")
     try:
         _positive_grid(selection.get("lambda_manifold"), "lambda_manifold")
@@ -148,9 +155,12 @@ def _candidate_id(strategy: str, lambda_manifold: float, lambda_sparse: float) -
     )
 
 
-def select_best_candidates(rows: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
+def select_best_candidates(
+    rows: Sequence[Mapping[str, Any]],
+    strategies: Sequence[str] = SUPPORTED_REWEIGHTING,
+) -> dict[str, dict[str, Any]]:
     selected: dict[str, dict[str, Any]] = {}
-    for strategy in SUPPORTED_REWEIGHTING:
+    for strategy in strategies:
         eligible = [dict(row) for row in rows if row["l21_reweighting"] == strategy]
         if not eligible:
             raise DataValidationError(f"no completed candidates for {strategy}")
@@ -266,13 +276,16 @@ def run_parameter_selection(
         model_raw.get("post_training_row_prune_squared_norm_threshold", 0.0)
     )
     selection = _mapping(config["selection"], "selection")
+    selected_reweighting = tuple(
+        str(value) for value in selection["l21_reweighting"]
+    )
     manifold_grid = _positive_grid(selection["lambda_manifold"], "lambda_manifold")
     sparse_grid = _positive_grid(selection["lambda_sparse"], "lambda_sparse")
     candidate_root = destination / "candidates"
     candidate_root.mkdir(exist_ok=True)
     completed: list[dict[str, Any]] = []
 
-    for strategy in SUPPORTED_REWEIGHTING:
+    for strategy in selected_reweighting:
         for lambda_manifold in manifold_grid:
             for lambda_sparse in sparse_grid:
                 candidate_id = _candidate_id(
@@ -310,6 +323,14 @@ def run_parameter_selection(
                             "graph_same_base_policy", ALLOW_SAME_BASE_GRAPH
                         )
                     ),
+                    graph_neighborhood=str(
+                        model_raw.get(
+                            "graph_neighborhood", COMPLETE_SAME_CLASS_GRAPH
+                        )
+                    ),
+                    graph_neighbor_count=int(
+                        model_raw.get("graph_neighbor_count", 10)
+                    ),
                     l21_reweighting=strategy,
                 )
                 view_group_ids = (
@@ -346,6 +367,8 @@ def run_parameter_selection(
                     "selection_config_sha256": config["_config_sha256"],
                     "base_config_sha256": base["_config_sha256"],
                     "l21_reweighting": strategy,
+                    "graph_neighborhood": model_config.graph_neighborhood,
+                    "graph_neighbor_count": model_config.graph_neighbor_count,
                     "lambda_manifold": lambda_manifold,
                     "lambda_sparse": lambda_sparse,
                     "knn_k": int(selection["knn_k"]),
@@ -385,7 +408,7 @@ def run_parameter_selection(
                     {
                         "completed_candidate_count": len(completed),
                         "expected_candidate_count": (
-                            len(SUPPORTED_REWEIGHTING)
+                            len(selected_reweighting)
                             * len(manifold_grid)
                             * len(sparse_grid)
                         ),
@@ -393,7 +416,7 @@ def run_parameter_selection(
                     },
                 )
 
-    selected = select_best_candidates(completed)
+    selected = select_best_candidates(completed, selected_reweighting)
     boundary = {
         strategy: {
             "lambda_manifold": _is_grid_boundary(
@@ -415,9 +438,16 @@ def run_parameter_selection(
         "candidate_count": len(completed),
         "selected": selected,
         "selected_parameter_on_grid_boundary": boundary,
-        "requires_boundary_extension_before_test": any(
-            any(flags.values()) for flags in boundary.values()
+        "requires_boundary_extension_before_test": (
+            selection["boundary_rule"]
+            == "extend_once_before_test_if_selected_lambda_is_grid_boundary"
+            and any(any(flags.values()) for flags in boundary.values())
         ),
+        "boundary_rule": selection["boundary_rule"],
+        "graph_neighborhood": str(
+            model_raw.get("graph_neighborhood", COMPLETE_SAME_CLASS_GRAPH)
+        ),
+        "graph_neighbor_count": int(model_raw.get("graph_neighbor_count", 10)),
         "test_features_materialized": False,
         "test_metrics_used": False,
         "train_pair_count": len(split_pairs["train"]),

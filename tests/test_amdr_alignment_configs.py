@@ -11,6 +11,7 @@ from hrrp_osr.amdr.model import (
     ALLOW_SAME_BASE_GRAPH,
     EXCLUDE_SAME_BASE_GRAPH,
     FIXED_INITIAL_L21_REWEIGHTING,
+    LOCAL_KNN_GAUSSIAN_GRAPH,
     UPDATE_EACH_ITERATION_L21_REWEIGHTING,
 )
 from hrrp_osr.amdr.reduction import SHARED_TRAIN_BASE_PCA
@@ -101,3 +102,26 @@ def test_calibration_selected_d_strategy_configs_are_matched() -> None:
         config["parameter_selection"]["test_metrics_used"] is False
         for config in configs
     )
+
+
+def test_local_graph_lambda2_base_changes_only_registered_graph_mechanism() -> None:
+    baseline = load_smoke_config(
+        PROJECT_ROOT
+        / "configs"
+        / "amdr"
+        / "pilot_fold0_amplitude_pruned_fixed_d_selected_v1.yaml"
+    )
+    local = load_smoke_config(
+        PROJECT_ROOT
+        / "configs"
+        / "amdr"
+        / "pilot_fold0_amplitude_pruned_fixed_d_local_knn_v1.yaml"
+    )
+    assert local["protocol_id"] == baseline["protocol_id"]
+    assert local["sampling"] == baseline["sampling"]
+    assert local["preprocessing"] == baseline["preprocessing"]
+    assert local["model"]["lambda_manifold"] == 1.0
+    assert local["model"]["lambda_sparse"] == 1.0
+    assert local["model"]["l21_reweighting"] == FIXED_INITIAL_L21_REWEIGHTING
+    assert local["model"]["graph_neighborhood"] == LOCAL_KNN_GAUSSIAN_GRAPH
+    assert local["model"]["graph_neighbor_count"] == 10
