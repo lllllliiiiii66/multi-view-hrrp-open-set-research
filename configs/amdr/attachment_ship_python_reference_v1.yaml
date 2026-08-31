@@ -1,0 +1,50 @@
+schema_version: 1
+stage: P0
+result_scope: diagnostic_attachment_ship
+diagnostic_variant_id: ship_attachment_python_amdr_reference_v1
+
+dataset:
+  dataset_id: sunchenglong_attachment_ship_v1
+  file_name: ship_data.mat
+  file_sha256: 9ef7fabcb0c9720cb14cd83597843184708ac6c076a8f4d13aad6044e2d0d58f
+  view_count: 2
+  feature_dimensions: [200, 200]
+  class_count: 5
+  train_sample_count: 12015
+  test_sample_count: 8010
+  samples_per_class_train: 2403
+  samples_per_class_test: 1602
+  attachment_protocol_warning: train_test_pairs_share_base_hrrp
+
+model:
+  algorithm_version: amdr_research_v1
+  implementation_scope: python_method_on_attachment_ship_diagnostic
+  lambda_manifold: 0.01
+  lambda_sparse: 0.01
+  max_iterations: 300
+  minimum_iterations: 3
+  tolerance: 3.0e-5
+  convergence_metric: relative_state_change_v1
+  numerical_epsilon: 1.0e-10
+  solve_ridge: 1.0e-6
+  initialization_seed: 20260831
+  graph_same_base_policy: allow_same_base_v1
+  post_training_row_prune_squared_norm_threshold: 1.0e-5
+
+checkpoint:
+  strategy: latest_only_atomic_replace
+  every_iterations: 25
+  selection: none_no_test_best
+
+knn:
+  k_values: [1, 3, 5, 7, 9]
+  distance: squared_euclidean
+  selection: none_report_all_test_results
+
+outputs:
+  diagnostic_only: true
+  raw_mat_not_copied: true
+  save_model: true
+  save_projections: true
+  save_predictions: true
+  save_environment: true
