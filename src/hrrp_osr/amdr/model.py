@@ -312,19 +312,9 @@ def _local_knn_gaussian_graph(
     if np.any(available < 1):
         raise DataValidationError("local graph left a sample without a neighbor")
     effective_k = min(int(neighbor_count), int(available.min()))
-    # Full row-wise sorting is unnecessarily expensive for the 500-pair
-    # pilot: only the nearest ``effective_k`` entries are needed.  Use a
-    # partial selection, then sort that small candidate set for deterministic
-    # distance order.  Excluded entries are +inf and cannot enter unless the
-    # protocol has fewer valid neighbors than requested (validated above).
-    partition_indices = np.argpartition(
-        distances, effective_k - 1, axis=1
+    neighbor_indices = np.argsort(
+        distances, axis=1, kind="stable"
     )[:, :effective_k]
-    partition_distances = np.take_along_axis(
-        distances, partition_indices, axis=1
-    )
-    order = np.argsort(partition_distances, axis=1, kind="stable")
-    neighbor_indices = np.take_along_axis(partition_indices, order, axis=1)
     neighbor_distances = np.take_along_axis(
         distances, neighbor_indices, axis=1
     )
