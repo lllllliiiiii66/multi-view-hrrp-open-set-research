@@ -270,6 +270,9 @@ def run_attachment_ship_reference(
         initialization_seed=int(model_raw["initialization_seed"]),
         convergence_metric=str(model_raw["convergence_metric"]),
         graph_same_base_policy=str(model_raw["graph_same_base_policy"]),
+        l21_reweighting=str(
+            model_raw.get("l21_reweighting", "update_each_iteration")
+        ),
     )
     checkpoint_raw = _mapping(config["checkpoint"], "checkpoint")
     checkpoint_interval = int(checkpoint_raw["every_iterations"])

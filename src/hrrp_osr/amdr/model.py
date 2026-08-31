@@ -18,6 +18,8 @@ RELATIVE_STATE_CHANGE = "relative_state_change_v1"
 ABSOLUTE_STATE_DELTA = "absolute_state_delta_v1"
 ALLOW_SAME_BASE_GRAPH = "allow_same_base_v1"
 EXCLUDE_SAME_BASE_GRAPH = "exclude_same_base_v1"
+FIXED_INITIAL_L21_REWEIGHTING = "fixed_initial"
+UPDATE_EACH_ITERATION_L21_REWEIGHTING = "update_each_iteration"
 
 
 @dataclass(frozen=True)
@@ -32,6 +34,7 @@ class AMDRModelConfig:
     minimum_iterations: int = 3
     convergence_metric: str = RELATIVE_STATE_CHANGE
     graph_same_base_policy: str = ALLOW_SAME_BASE_GRAPH
+    l21_reweighting: str = UPDATE_EACH_ITERATION_L21_REWEIGHTING
 
 
 @dataclass(frozen=True)
@@ -111,6 +114,11 @@ def _validate_fit_inputs(
         EXCLUDE_SAME_BASE_GRAPH,
     }:
         errors.append("unsupported same-base graph policy")
+    if config.l21_reweighting not in {
+        FIXED_INITIAL_L21_REWEIGHTING,
+        UPDATE_EACH_ITERATION_L21_REWEIGHTING,
+    }:
+        errors.append("unsupported l21 reweighting policy")
     if errors:
         raise DataValidationError("Invalid AMDR fit input:\n- " + "\n- ".join(errors))
     return materialized, y, int(unique.size)
@@ -157,6 +165,8 @@ def _config_signature(config: AMDRModelConfig) -> dict[str, Any]:
     # same-base exclusion policy existed.
     if config.graph_same_base_policy != ALLOW_SAME_BASE_GRAPH:
         signature["graph_same_base_policy"] = config.graph_same_base_policy
+    if config.l21_reweighting != UPDATE_EACH_ITERATION_L21_REWEIGHTING:
+        signature["l21_reweighting"] = config.l21_reweighting
     return signature
 
 
@@ -449,10 +459,16 @@ def fit_amdr(
     sample_count, total_dimension = combined.shape
     target = -np.ones((sample_count, class_count), dtype=np.float64)
     target[np.arange(sample_count), y] = 1.0
+    rng = np.random.default_rng(config.initialization_seed)
+    initial_weights = rng.random(
+        (total_dimension, class_count), dtype=np.float64
+    )
+    fixed_l21_diagonal = 1.0 / (
+        np.linalg.norm(initial_weights, axis=1) + config.numerical_epsilon
+    )
     if resume_checkpoint is None:
         adjusted_target = target.copy()
-        rng = np.random.default_rng(config.initialization_seed)
-        weights = rng.random((total_dimension, class_count), dtype=np.float64)
+        weights = initial_weights.copy()
         alpha = np.full(len(materialized), 1.0 / len(materialized), dtype=np.float64)
         graphs = _initialize_class_graphs(
             y,
@@ -520,8 +536,11 @@ def fit_amdr(
             manifold_blocks.append(manifold)
         manifold_all = block_diag(*manifold_blocks)
 
-        row_norm = np.linalg.norm(old_weights, axis=1)
-        l21_diagonal = 1.0 / (row_norm + config.numerical_epsilon)
+        if config.l21_reweighting == FIXED_INITIAL_L21_REWEIGHTING:
+            l21_diagonal = fixed_l21_diagonal
+        else:
+            row_norm = np.linalg.norm(old_weights, axis=1)
+            l21_diagonal = 1.0 / (row_norm + config.numerical_epsilon)
         alpha_all = np.concatenate(
             [
                 np.full(dimension, alpha[index], dtype=np.float64)
@@ -627,6 +646,7 @@ def fit_amdr(
                 "delta": absolute_delta,
                 "relative_state_change": relative_delta,
                 "convergence_metric": config.convergence_metric,
+                "l21_reweighting": config.l21_reweighting,
                 "convergence_value": convergence_value,
                 "weight_frobenius_norm": float(np.linalg.norm(weights)),
                 "alpha": alpha.tolist(),

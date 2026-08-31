@@ -6,6 +6,7 @@ import pytest
 from hrrp_osr.data.errors import DataValidationError
 from hrrp_osr.amdr.model import (
     EXCLUDE_SAME_BASE_GRAPH,
+    FIXED_INITIAL_L21_REWEIGHTING,
     AMDRFitResult,
     AMDRModelConfig,
     fit_amdr,
@@ -198,6 +199,66 @@ def test_amdr_rejects_unknown_convergence_metric() -> None:
                 solve_ridge=1.0e-6,
                 initialization_seed=3,
                 convergence_metric="unknown",
+            ),
+        )
+
+
+def test_fixed_initial_l21_reweighting_is_deterministic_and_differs_after_first_update() -> None:
+    train_views, train_labels = _synthetic_views(31, 6)
+    common = dict(
+        lambda_manifold=0.01,
+        lambda_sparse=1.0,
+        max_iterations=2,
+        minimum_iterations=1,
+        tolerance=1.0e-30,
+        numerical_epsilon=1.0e-10,
+        solve_ridge=1.0e-6,
+        initialization_seed=37,
+    )
+    dynamic = fit_amdr(train_views, train_labels, AMDRModelConfig(**common))
+    fixed = fit_amdr(
+        train_views,
+        train_labels,
+        AMDRModelConfig(
+            **common,
+            l21_reweighting=FIXED_INITIAL_L21_REWEIGHTING,
+        ),
+    )
+    repeated = fit_amdr(
+        train_views,
+        train_labels,
+        AMDRModelConfig(
+            **common,
+            l21_reweighting=FIXED_INITIAL_L21_REWEIGHTING,
+        ),
+    )
+
+    assert dynamic.history[0]["weight_frobenius_norm"] == pytest.approx(
+        fixed.history[0]["weight_frobenius_norm"]
+    )
+    assert not np.array_equal(dynamic.weights, fixed.weights)
+    np.testing.assert_array_equal(fixed.weights, repeated.weights)
+    assert all(
+        row["l21_reweighting"] == FIXED_INITIAL_L21_REWEIGHTING
+        for row in fixed.history
+    )
+
+
+def test_amdr_rejects_unknown_l21_reweighting_policy() -> None:
+    train_views, train_labels = _synthetic_views(41, 4)
+    with pytest.raises(DataValidationError, match="l21 reweighting"):
+        fit_amdr(
+            train_views,
+            train_labels,
+            AMDRModelConfig(
+                lambda_manifold=0.01,
+                lambda_sparse=0.01,
+                max_iterations=2,
+                tolerance=1.0e-5,
+                numerical_epsilon=1.0e-10,
+                solve_ridge=1.0e-6,
+                initialization_seed=43,
+                l21_reweighting="unknown",
             ),
         )
 

@@ -31,7 +31,9 @@ from hrrp_osr.amdr.model import (
     ALLOW_SAME_BASE_GRAPH,
     AMDR_ALGORITHM_VERSION,
     EXCLUDE_SAME_BASE_GRAPH,
+    FIXED_INITIAL_L21_REWEIGHTING,
     RELATIVE_STATE_CHANGE,
+    UPDATE_EACH_ITERATION_L21_REWEIGHTING,
     AMDRCheckpoint,
     AMDRModelConfig,
     fit_amdr,
@@ -168,6 +170,13 @@ def load_smoke_config(path: str | Path) -> dict[str, Any]:
         EXCLUDE_SAME_BASE_GRAPH,
     }:
         errors.append("model graph_same_base_policy is invalid")
+    if model.get(
+        "l21_reweighting", UPDATE_EACH_ITERATION_L21_REWEIGHTING
+    ) not in {
+        FIXED_INITIAL_L21_REWEIGHTING,
+        UPDATE_EACH_ITERATION_L21_REWEIGHTING,
+    }:
+        errors.append("model l21_reweighting is invalid")
     max_iterations = int(model.get("max_iterations", 0))
     max_allowed = 5 if result_scope == "diagnostic_smoke" else 300
     if not 1 <= max_iterations <= max_allowed:
@@ -482,6 +491,11 @@ def run_smoke(
         graph_same_base_policy=str(
             model_raw.get("graph_same_base_policy", ALLOW_SAME_BASE_GRAPH)
         ),
+        l21_reweighting=str(
+            model_raw.get(
+                "l21_reweighting", UPDATE_EACH_ITERATION_L21_REWEIGHTING
+            )
+        ),
     )
     checkpoint_raw = _mapping(config.get("checkpoint", {}), "checkpoint")
     checkpoint_every = int(checkpoint_raw.get("every_iterations", 0))
@@ -604,6 +618,7 @@ def run_smoke(
                 else pca_model.cumulative_explained_variance
             ),
             "graph_same_base_policy": model_config.graph_same_base_policy,
+            "l21_reweighting": model_config.l21_reweighting,
             "post_training_row_prune_squared_norm_threshold": row_prune_threshold,
             "pruned_weight_row_count": pruned_weight_row_count,
             "slot_order": str(sampling.get("slot_order", RANDOMIZED_SLOT_ORDER)),
