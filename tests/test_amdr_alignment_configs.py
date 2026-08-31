@@ -10,6 +10,8 @@ from hrrp_osr.amdr.data import (
 from hrrp_osr.amdr.model import (
     ALLOW_SAME_BASE_GRAPH,
     EXCLUDE_SAME_BASE_GRAPH,
+    FIXED_INITIAL_L21_REWEIGHTING,
+    UPDATE_EACH_ITERATION_L21_REWEIGHTING,
 )
 from hrrp_osr.amdr.reduction import SHARED_TRAIN_BASE_PCA
 from hrrp_osr.amdr.smoke import load_smoke_config
@@ -75,3 +77,27 @@ def test_overfit_diagnostic_configs_change_only_the_registered_mechanism() -> No
         ALLOW_SAME_BASE_GRAPH,
         EXCLUDE_SAME_BASE_GRAPH,
     ]
+
+
+def test_calibration_selected_d_strategy_configs_are_matched() -> None:
+    names = (
+        "pilot_fold0_amplitude_pruned_fixed_d_selected_v1.yaml",
+        "pilot_fold0_amplitude_pruned_dynamic_d_selected_v1.yaml",
+    )
+    configs = [
+        load_smoke_config(PROJECT_ROOT / "configs" / "amdr" / name)
+        for name in names
+    ]
+    assert {config["protocol_id"] for config in configs} == {
+        "amdr_10class_odd_even_crossfit_pilot_fold0_v1"
+    }
+    assert [config["model"]["l21_reweighting"] for config in configs] == [
+        FIXED_INITIAL_L21_REWEIGHTING,
+        UPDATE_EACH_ITERATION_L21_REWEIGHTING,
+    ]
+    assert all(config["model"]["lambda_manifold"] == 1.0 for config in configs)
+    assert all(config["model"]["lambda_sparse"] == 1.0 for config in configs)
+    assert all(
+        config["parameter_selection"]["test_metrics_used"] is False
+        for config in configs
+    )
