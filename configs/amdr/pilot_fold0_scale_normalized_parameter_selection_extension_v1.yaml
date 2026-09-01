@@ -1,0 +1,39 @@
+schema_version: 1
+stage: P0
+result_scope: diagnostic_parameter_selection
+selection_id: amdr_fold0_scale_normalized_local_knn_extension_v1
+
+base_experiment_config: configs/amdr/pilot_fold0_scale_normalized_local_knn_base_v1.yaml
+
+evidence_scope:
+  posthoc_after_fold0_test_seen: true
+  confirmatory_claim_allowed: false
+  rationale: extend_once_below_both_selected_lower_boundaries_before_normalized_test
+  parent_selection_config: configs/amdr/pilot_fold0_scale_normalized_parameter_selection_v1.yaml
+  parent_selected_lambda_manifold: 100.0
+  parent_selected_lambda_sparse: 0.003
+
+selection:
+  split: calibration
+  test_features_materialized: false
+  test_metrics_used: false
+  primary_metric: calibration_accuracy
+  secondary_metric: calibration_macro_f1
+  knn_k: 3
+  l21_reweighting:
+    - fixed_initial
+  lambda_manifold: [10.0, 30.0, 100.0]
+  lambda_sparse: [0.0003, 0.001, 0.003]
+  tie_break_order:
+    - higher_calibration_accuracy
+    - higher_calibration_macro_f1
+    - lower_lambda_manifold
+    - lower_lambda_sparse
+  boundary_rule: report_boundary_without_automatic_extension
+
+outputs:
+  save_pair_manifest: true
+  save_each_candidate_model: true
+  save_each_candidate_training_log: true
+  save_selection_summary: true
+  diagnostic_only: true
