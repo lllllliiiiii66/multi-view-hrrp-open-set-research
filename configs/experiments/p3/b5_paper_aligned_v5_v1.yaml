@@ -1,0 +1,56 @@
+schema_version: 1
+experiment_id: b5_paper_aligned_v5_v1
+stage: P3
+baseline: B5
+run_kind: paper_aligned
+result_scope: paper_aligned_v5
+data:
+  dataset_id: hrrp_10class_theta83_hh_v1
+  profiles_sha256: 2dd92282c125f0f677cf1f2dfce828781c8ba4385cf9ae552c4a2c56033c3f5b
+  processed_manifest_sha256: 748b9f30629c3b3cbe66c6a1dac30863fdab2d81a214e46d8bc3ef7c6022a08a
+  bundle_sha256: 79176091b5b745e5df5957f1bb4ade7304c1403a4a32e64622e012db67d5a0c5
+  accepted_risk_id: profile_length_role_shortcut_v1
+  accepted_risk_status: accepted_for_first_round
+classes:
+  known_order: [CVN77, DDG-1000, DDG-112, 油气轮MARVEL CRANE, 爱达魔都号, 迷你好望角型散货船, 集装箱船达飞罗尔多夫级]
+  unknown_label: 7
+set_protocol:
+  view_count: 5
+  distinct_domains: true
+  set_algorithm_version: v5_leave_one_domain_out_v1
+  set_seed: 20260810
+  set_repeat: 0
+  random_input_order: true
+  angle_or_position_inputs: false
+checkpoint_reuse:
+  source_baseline: B2
+  training_allowed: false
+  seeds: [20260810, 20260820, 20260830, 20260840, 20260850]
+  checkpoint_sha256:
+    "20260810": 7d729bb0ab5321e1163dbfd8951d21cd2f8156fc2f9261c2644221f7a6cc4d37
+    "20260820": b58f6423d9e9d571332bf43af43ea6fc03dbd50fd48c1e14dd6e5f679eb3f5bd
+    "20260830": a93c82d178a670c561ef67a55250b49473c86544e62aebea29b3b9fbb18043f3
+    "20260840": 93758471352a2ccf1eb651e66479b3046775d5059714a55ab7ad2d8971a46090
+    "20260850": 27099fe0907ea55d695f14fbb2cc1f7787ae1f1b8d80df1c036878010e28ffaf
+openmax_fitting:
+  population: correctly_classified_known_train_only
+  activation: pre_softmax_known_logits
+  unknown_data_used: false
+openmax_parameters:
+  selection_rule: fixed_preregistered_original_style_v1
+  tail_size: 20
+  alpha_rank: 7
+  distance_type: eucos
+  eucos_euclidean_scale: 200.0
+fusion:
+  method: single_set_activation_openmax
+evaluation:
+  unknown_score: openmax_unknown_posterior
+  unknown_score_direction: larger_is_more_unknown
+  threshold_source: known_validation_only
+  threshold_known_acceptance_rate: 0.95
+  permutation_atol: 1.0e-5
+  permutation_scheme: ten_deterministic_v5_permutations_v1
+artifact_policy:
+  fail_if_output_nonempty: true
+  save_fit_entity_ids: true

@@ -1,0 +1,66 @@
+schema_version: 1
+experiment_id: b6_main_v1
+stage: P3
+baseline: B6
+run_kind: main
+result_scope: main_v3
+method_claim: core_algorithm_reproduction_and_v3_adaptation
+source:
+  paper: Liu et al. 2023 JDSR-OSR
+  doi: 10.11999/JEIT221284
+  official_pdf: https://jeit.ac.cn/cn/article/pdf/preview/10.11999/JEIT221284.pdf
+  original_code_available: false
+data:
+  dataset_id: hrrp_10class_theta83_hh_v1
+  profiles_sha256: 2dd92282c125f0f677cf1f2dfce828781c8ba4385cf9ae552c4a2c56033c3f5b
+  processed_manifest_sha256: 748b9f30629c3b3cbe66c6a1dac30863fdab2d81a214e46d8bc3ef7c6022a08a
+  bundle_sha256: 79176091b5b745e5df5957f1bb4ade7304c1403a4a32e64622e012db67d5a0c5
+  accepted_risk_id: profile_length_role_shortcut_v1
+  accepted_risk_status: accepted_for_first_round
+classes:
+  known_order: [CVN77, DDG-1000, DDG-112, 油气轮MARVEL CRANE, 爱达魔都号, 迷你好望角型散货船, 集装箱船达飞罗尔多夫级]
+  unknown_label: 7
+set_protocol:
+  view_count: 3
+  distinct_domains: true
+  set_algorithm_version: v3_disjoint_domain_partition_v1
+  set_seed: 20260810
+  set_repeat: 0
+  random_input_order: true
+  angle_or_position_inputs: false
+preprocessing:
+  method: per_profile_l2
+  fit_population: none
+  power_transform: omitted_no_transferable_parameter
+dictionary:
+  population: known_train_hrrp_only
+  atoms_per_class: 216
+  class_count: 7
+  atom_order: processed_manifest_order
+  training_error_self_atom_policy: exclude_member_atom
+solver:
+  algorithm: greedy_dynamic_active_set_group_omp_v1
+  shared_support: class_block
+  within_block_atoms: view_specific
+  sparsity_candidates: [1, 2, 3]
+  selection_rule: highest_known_validation_closed_set_accuracy_then_smaller_k
+  ridge: 1.0e-6
+gpd:
+  fit_population: known_train_sets_only
+  matching_tail: right
+  nonmatching_tail: left_of_sum
+  rho_candidates: [0.5, 0.6, 0.7, 0.8]
+  nonmatching_weight_candidates: [0.0, 0.25, 0.5, 0.75, 1.0]
+  selection_rule: five_fold_known_validation_acceptance_stability_v1
+  unknown_data_used: false
+evaluation:
+  unknown_score_direction: larger_is_more_unknown
+  threshold_source: known_validation_only
+  threshold_known_acceptance_rate: 0.95
+  paper_fixed_delta_used: false
+  permutation_atol: 1.0e-5
+artifact_policy:
+  fail_if_output_nonempty: true
+  save_dictionary_manifest: true
+  save_fit_set_ids: true
+  save_reconstruction_errors: true

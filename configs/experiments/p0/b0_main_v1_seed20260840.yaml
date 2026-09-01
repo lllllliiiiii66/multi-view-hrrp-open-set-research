@@ -1,0 +1,7 @@
+extends: b0_main_v1_seed20260810.yaml
+overrides:
+  experiment_id: b0_main_v1_seed20260840
+  training:
+    active_seed_index: 3
+    initialization_seed: 20260840
+    dataloader_seed: 20260841

@@ -1,0 +1,59 @@
+schema_version: 1
+experiment_id: b2_main_v1
+stage: P1
+baseline: B2
+run_kind: main
+result_scope: main_v3
+data:
+  dataset_id: hrrp_10class_theta83_hh_v1
+  profiles_sha256: 2dd92282c125f0f677cf1f2dfce828781c8ba4385cf9ae552c4a2c56033c3f5b
+  processed_manifest_sha256: 748b9f30629c3b3cbe66c6a1dac30863fdab2d81a214e46d8bc3ef7c6022a08a
+  bundle_sha256: 79176091b5b745e5df5957f1bb4ade7304c1403a4a32e64622e012db67d5a0c5
+  accepted_risk_id: profile_length_role_shortcut_v1
+  accepted_risk_status: accepted_for_first_round
+classes:
+  known_order: [CVN77, DDG-1000, DDG-112, 油气轮MARVEL CRANE, 爱达魔都号, 迷你好望角型散货船, 集装箱船达飞罗尔多夫级]
+  unknown_label: 7
+normalization:
+  method: global_scalar_zscore
+  fit_population: known_train_only
+  epsilon: 1.0e-8
+set_protocol:
+  view_count: 3
+  distinct_domains: true
+  set_algorithm_version: v3_disjoint_domain_partition_v1
+  set_seed: 20260810
+  set_repeat: 0
+  random_input_order: true
+model:
+  architecture: deep_sets_mean_v1
+  encoder_architecture: shared_hrrp_encoder_1d_v1
+  pooling: mean
+  angle_or_position_encoding: false
+training:
+  budget_id: neural_budget_v1
+  initialization_seeds: [20260810, 20260820, 20260830, 20260840, 20260850]
+  dataloader_seed_rule: initialization_plus_one
+  epochs: 100
+  batch_size: 64
+  optimizer: AdamW
+  learning_rate: 1.0e-3
+  weight_decay: 1.0e-4
+  scheduler: none
+  early_stopping: true
+  early_stopping_patience: 15
+  early_stopping_min_delta: 0.0
+  model_selection: best_known_validation_accuracy
+  data_augmentation: none
+  unknown_data_used: false
+  deterministic_algorithms: true
+  num_workers: 0
+evaluation:
+  scores: [msp, energy]
+  energy_temperature: 1.0
+  unknown_score_direction: larger_is_more_unknown
+  threshold_source: known_validation_only
+  threshold_known_acceptance_rate: 0.95
+  permutation_atol: 1.0e-5
+artifact_policy:
+  fail_if_output_nonempty: true

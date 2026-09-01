@@ -1,0 +1,115 @@
+schema_version: 1
+experiment_id: b0_main_v1_seed20260810
+stage: P0
+baseline: B0
+run_kind: main
+result_scope: main_v3
+
+data:
+  dataset_id: hrrp_10class_theta83_hh_v1
+  preprocessing_id: hrrp_padding_complex_gaussian_v1
+  bundle_root_env: HRRP_PROCESSED_ROOT
+  input_manifest_sha256: 2ce908e24b68dcd7524e7f1544f97f3761d4955f2d64d8cfe05aafc090d77724
+  profiles_sha256: 2dd92282c125f0f677cf1f2dfce828781c8ba4385cf9ae552c4a2c56033c3f5b
+  processed_manifest_sha256: 748b9f30629c3b3cbe66c6a1dac30863fdab2d81a214e46d8bc3ef7c6022a08a
+  bundle_sha256: 79176091b5b745e5df5957f1bb4ade7304c1403a4a32e64622e012db67d5a0c5
+  accepted_risk_id: profile_length_role_shortcut_v1
+  accepted_risk_status: accepted_for_first_round
+  input_length: 601
+  input_dtype_on_disk: float64
+  input_dtype_model: float32
+
+classes:
+  known_order:
+    - CVN77
+    - DDG-1000
+    - DDG-112
+    - 油气轮MARVEL CRANE
+    - 爱达魔都号
+    - 迷你好望角型散货船
+    - 集装箱船达飞罗尔多夫级
+  unknown_label: 7
+
+normalization:
+  method: global_scalar_zscore
+  fit_population: known_train_only
+  epsilon: 1.0e-8
+
+set_protocol:
+  view_count: 3
+  distinct_domains: true
+  set_algorithm_version: v3_disjoint_domain_partition_v1
+  set_seed: 20260810
+  set_repeat: 0
+  random_input_order: true
+  audit_fields_not_model_inputs: true
+
+b0_view_selection:
+  algorithm_version: sha256_uniform_index_v1
+  seed: 20260820
+  repeats: 30
+  average_metrics_not_predictions: true
+
+model:
+  architecture: shared_hrrp_encoder_1d_v1
+  input_channels: 1
+  channels: [32, 64, 128]
+  kernels: [7, 5, 3]
+  feature_dim: 128
+  known_class_count: 7
+  angle_or_position_encoding: false
+
+training:
+  budget_id: neural_budget_v1
+  planned_initialization_seeds: [20260810, 20260820, 20260830, 20260840, 20260850]
+  active_seed_index: 0
+  initialization_seed: 20260810
+  dataloader_seed: 20260811
+  epochs: 100
+  batch_size: 64
+  optimizer: AdamW
+  learning_rate: 1.0e-3
+  weight_decay: 1.0e-4
+  scheduler: none
+  early_stopping: true
+  early_stopping_patience: 15
+  early_stopping_min_delta: 0.0
+  model_selection: best_known_validation_accuracy
+  data_augmentation: none
+  unknown_data_used: false
+  deterministic_algorithms: true
+  num_workers: 0
+
+evaluation:
+  unknown_score_direction: larger_is_more_unknown
+  scores: [msp, energy]
+  energy_temperature: 1.0
+  threshold_source: known_validation_only
+  threshold_known_acceptance_rate: 0.95
+  fpr95_positive_class: unknown
+  metrics:
+    - known_accuracy
+    - known_macro_f1
+    - auroc
+    - oscr
+    - fpr95
+    - k_plus_1_macro_f1
+    - known_acceptance_rate
+    - unknown_rejection_rate
+
+prior_test_exposure:
+  status: diagnostic_smoke_results_seen_before_main_run
+  allowed_effect: none
+  note: main budget and seed registry were frozen without using unknown-test metrics
+
+artifact_policy:
+  fail_if_output_nonempty: true
+  save_checkpoint: true
+  save_predictions: true
+  save_set_manifest: true
+  save_normalization: true
+  save_resolved_config: true
+  save_environment: true
+  save_training_log: true
+  save_inference_timing: true
+  save_artifact_hashes: true
