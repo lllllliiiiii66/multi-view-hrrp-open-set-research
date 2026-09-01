@@ -45,6 +45,26 @@ def test_local_graph_lambda2_selection_is_fixed_d_and_bounded() -> None:
     )
 
 
+def test_local_graph_lambda2_posthoc_extension_is_calibration_only() -> None:
+    config = load_selection_config(
+        PROJECT_ROOT
+        / "configs"
+        / "amdr"
+        / "pilot_fold0_local_knn_lambda2_posthoc_extension_v1.yaml"
+    )
+    selection = config["selection"]
+    assert config["evidence_scope"]["posthoc_after_fold0_test_seen"] is True
+    assert config["evidence_scope"]["confirmatory_claim_allowed"] is False
+    assert selection["l21_reweighting"] == [FIXED_INITIAL_L21_REWEIGHTING]
+    assert selection["lambda_manifold"] == [1.0]
+    assert selection["lambda_sparse"] == [10.0, 15.0, 20.0, 30.0, 50.0, 100.0]
+    assert selection["test_features_materialized"] is False
+    assert selection["test_metrics_used"] is False
+    assert selection["boundary_rule"] == (
+        "report_boundary_without_automatic_extension"
+    )
+
+
 def test_select_best_candidates_uses_registered_tie_breaks() -> None:
     rows = []
     for strategy in (

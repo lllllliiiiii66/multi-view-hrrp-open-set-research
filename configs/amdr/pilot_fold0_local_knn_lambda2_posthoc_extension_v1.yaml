@@ -1,0 +1,36 @@
+schema_version: 1
+stage: P0
+result_scope: diagnostic_parameter_selection
+selection_id: amdr_fold0_pilot_local_knn_lambda2_posthoc_extension_v1
+
+base_experiment_config: configs/amdr/pilot_fold0_amplitude_pruned_fixed_d_local_knn_v1.yaml
+
+evidence_scope:
+  posthoc_after_fold0_test_seen: true
+  confirmatory_claim_allowed: false
+  rationale: user_requested_extension_after_lambda_sparse_10_was_selected_at_boundary
+
+selection:
+  split: calibration
+  test_features_materialized: false
+  test_metrics_used: false
+  primary_metric: calibration_accuracy
+  secondary_metric: calibration_macro_f1
+  knn_k: 3
+  l21_reweighting:
+    - fixed_initial
+  lambda_manifold: [1.0]
+  lambda_sparse: [10.0, 15.0, 20.0, 30.0, 50.0, 100.0]
+  tie_break_order:
+    - higher_calibration_accuracy
+    - higher_calibration_macro_f1
+    - lower_lambda_manifold
+    - lower_lambda_sparse
+  boundary_rule: report_boundary_without_automatic_extension
+
+outputs:
+  save_pair_manifest: true
+  save_each_candidate_model: true
+  save_each_candidate_training_log: true
+  save_selection_summary: true
+  diagnostic_only: true
