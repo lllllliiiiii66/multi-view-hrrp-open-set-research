@@ -65,6 +65,28 @@ def test_local_graph_lambda2_posthoc_extension_is_calibration_only() -> None:
     )
 
 
+def test_lambda2_50_d_strategy_control_changes_only_reweighting() -> None:
+    config = load_selection_config(
+        PROJECT_ROOT
+        / "configs"
+        / "amdr"
+        / "pilot_fold0_local_knn_lambda2_50_d_strategy_control_v1.yaml"
+    )
+    selection = config["selection"]
+    gate = config["test_gate"]
+    assert selection["l21_reweighting"] == [
+        FIXED_INITIAL_L21_REWEIGHTING,
+        UPDATE_EACH_ITERATION_L21_REWEIGHTING,
+    ]
+    assert selection["lambda_manifold"] == [1.0]
+    assert selection["lambda_sparse"] == [50.0]
+    assert selection["test_features_materialized"] is False
+    assert selection["test_metrics_used"] is False
+    assert gate["minimum_calibration_accuracy_gain"] == 0.005
+    assert gate["require_calibration_macro_f1_noninferior"] is True
+    assert gate["if_gate_fails"] == "do_not_materialize_test"
+
+
 def test_select_best_candidates_uses_registered_tie_breaks() -> None:
     rows = []
     for strategy in (
