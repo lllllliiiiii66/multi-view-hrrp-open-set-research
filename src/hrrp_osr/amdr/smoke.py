@@ -84,6 +84,7 @@ def load_smoke_config(path: str | Path) -> dict[str, Any]:
         "diagnostic_smoke",
         "diagnostic_convergence",
         "diagnostic_pilot",
+        "diagnostic_sample_scale",
     }:
         errors.append("result_scope is not an allowed P0 AMDR diagnostic")
     bundle = _mapping(config.get("bundle"), "bundle")
@@ -107,8 +108,16 @@ def load_smoke_config(path: str | Path) -> dict[str, Any]:
         errors.append("odd/even and 7/3 protocol invariants are invalid")
     sampling = _mapping(config.get("sampling"), "sampling")
     counts = _mapping(sampling.get("pairs_per_class"), "sampling.pairs_per_class")
-    expected_pairs = 500 if result_scope == "diagnostic_pilot" else 100
+    expected_pairs_by_split = (
+        {"train": 2000, "calibration": 500, "test": 500}
+        if result_scope == "diagnostic_sample_scale"
+        else {
+            split: 500 if result_scope == "diagnostic_pilot" else 100
+            for split in ("train", "calibration", "test")
+        }
+    )
     for split in ("train", "calibration", "test"):
+        expected_pairs = expected_pairs_by_split[split]
         if int(counts.get(split, 0)) != expected_pairs:
             errors.append(
                 f"{result_scope} requires {expected_pairs} {split} pairs per class"
@@ -158,6 +167,7 @@ def load_smoke_config(path: str | Path) -> dict[str, Any]:
             "amdr_research_v1_local_graph_diagnostic",
             "amdr_research_v1_overfit_diagnostic",
         },
+        "diagnostic_sample_scale": "amdr_research_v1_local_graph_diagnostic",
     }.get(result_scope)
     implementation_scope = model.get("implementation_scope")
     if isinstance(expected_implementation_scope, set):

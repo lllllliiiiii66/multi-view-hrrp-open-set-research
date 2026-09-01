@@ -140,3 +140,30 @@ def test_posthoc_local_graph_selected_config_is_explicitly_diagnostic() -> None:
     assert config["diagnostic_parent"]["posthoc_after_fold0_test_seen"] is True
     assert config["diagnostic_parent"]["confirmatory_claim_allowed"] is False
     assert config["parameter_selection"]["test_metrics_used"] is False
+
+
+def test_train2000_control_changes_only_training_pair_count() -> None:
+    reference = load_smoke_config(
+        PROJECT_ROOT
+        / "configs"
+        / "amdr"
+        / "pilot_fold0_amplitude_pruned_fixed_d_local_knn_lambda2_posthoc_selected_v1.yaml"
+    )
+    candidate = load_smoke_config(
+        PROJECT_ROOT
+        / "configs"
+        / "amdr"
+        / "pilot_fold0_amplitude_pruned_fixed_d_local_knn_lambda2_50_train2000_control_v1.yaml"
+    )
+    assert candidate["bundle"] == reference["bundle"]
+    assert candidate["protocol"] == reference["protocol"]
+    assert candidate["preprocessing"] == reference["preprocessing"]
+    assert candidate["model"] == reference["model"]
+    assert candidate["knn"] == reference["knn"]
+    assert candidate["sampling"] == {
+        **reference["sampling"],
+        "pairs_per_class": {"train": 2000, "calibration": 500, "test": 500},
+    }
+    assert candidate["sample_size_control"]["independent_train_base_profiles_per_known_class_unchanged"] == 144
+    assert candidate["diagnostic_parent"]["posthoc_after_fold0_test_seen"] is True
+    assert candidate["diagnostic_parent"]["confirmatory_claim_allowed"] is False
