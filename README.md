@@ -4,9 +4,10 @@
 
 ## 新任务入口
 
-1. 完整阅读 [`AGENTS.md`](./AGENTS.md)，遵守阶段顺序、数据隔离和验证要求。
-2. 完整阅读 [`RESEARCH_CONTEXT.md`](./RESEARCH_CONTEXT.md)，恢复研究问题、冻结协议与证据边界。
-3. 检查已有配置、manifest、checkpoint 和测试结果，避免重复工作。
+1. 如需快速了解截至 2026-09-01 的 AMDR 全部背景、复现和实验现状，先读 [AMDR Pro 完整交接](./docs/amdr_open_set/AMDR_PRO_HANDOFF_2026-09-01.md)。
+2. 完整阅读 [`AGENTS.md`](./AGENTS.md)，遵守阶段顺序、数据隔离和验证要求。
+3. 完整阅读 [`RESEARCH_CONTEXT.md`](./RESEARCH_CONTEXT.md)，恢复研究问题、冻结协议与证据边界。
+4. 检查已有配置、manifest、checkpoint 和测试结果，避免重复工作。
 
 ## 当前阶段
 
@@ -19,6 +20,7 @@ P0 通过后，第一项方法实验仅为固定 AMDR 表示下的 Thresholded K
 
 当前路线与 Stage 1 边界见：
 
+- [截至 2026-09-01 的 AMDR 全量交接与决策问题](./docs/amdr_open_set/AMDR_PRO_HANDOFF_2026-09-01.md)；
 - [`RESEARCH_CONTEXT.md`](./RESEARCH_CONTEXT.md)；
 - [AMDR 论文—代码—数据审查](./docs/sunchenglong_amdr_paper_code_audit_2026-08-29.md)；
 - [AMDR 开集研究路线与 Stage 1 协议提案](./docs/amdr_open_set/research_route_and_stage1_protocol_proposal_2026-08-30.md)。
