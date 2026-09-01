@@ -14,13 +14,14 @@
 当前主线已经收束为：以组内 Adaptive Manifold Discriminative Regression
 （AMDR）闭集多视角融合框架为基础，研究目标身份开集识别。
 
-当前处于 P0：数据协议和两视角构造规则已冻结，并已完成 Python AMDR 的 fold 0 诊断性 smoke。正式预处理和 AMDR `paper_aligned` 数值边界仍待确认。
-P0 通过后，第一项方法实验仅为固定 AMDR 表示下的 Thresholded KNN。
+P0 AMDR 封口实验已经完成。固定定义的 AMDR 虽然稳定收敛，但在一次性 fold 4 确认中，Accuracy 和 Macro-F1 分别比相同数据上的 Raw two-view concatenation + KNN 低 5.71 和 4.87 个百分点，按预注册规则判为 `reject`。AMDR 不再作为主要表示基础，只保留为历史或负面对照；P1 尚未启动，下一条主路线需另行确认。
 旧 B0–B6、OpenMax、CBD、CBD+view 和相关诊断只作历史参考，不是当前默认候选。
 
 当前路线与 Stage 1 边界见：
 
 - [截至 2026-09-01 的 AMDR 全量交接与决策问题](./docs/amdr_open_set/AMDR_PRO_HANDOFF_2026-09-01.md)；
+- [P0 AMDR 封口实验预注册](./docs/amdr_open_set/p0_amdr_closure_preregistration_2026-09-01.md)；
+- [P0 AMDR 封口实验结果](./docs/amdr_open_set/p0_amdr_closure_results_2026-09-01.md)；
 - [`RESEARCH_CONTEXT.md`](./RESEARCH_CONTEXT.md)；
 - [AMDR 论文—代码—数据审查](./docs/sunchenglong_amdr_paper_code_audit_2026-08-29.md)；
 - [AMDR 开集研究路线与 Stage 1 协议提案](./docs/amdr_open_set/research_route_and_stage1_protocol_proposal_2026-08-30.md)。
