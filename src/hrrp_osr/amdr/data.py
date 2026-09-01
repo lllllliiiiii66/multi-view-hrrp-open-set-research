@@ -237,6 +237,7 @@ def build_fold_pairs(
     base_seed: int,
     pairs_per_class: Mapping[str, int],
     slot_order: str = RANDOMIZED_SLOT_ORDER,
+    included_splits: Sequence[str] = ("train", "calibration", "test"),
 ) -> tuple[tuple[TwoViewPair, ...], dict[str, Any]]:
     if fold_index not in range(fold_count):
         raise DataValidationError("fold_index is outside the configured fold range")
@@ -257,18 +258,30 @@ def build_fold_pairs(
             split = "calibration" if angle_folds[angle] == fold_index else "train"
             rows_by_split_class[(split, class_name)].append(row)
 
+    normalized_splits = tuple(str(split) for split in included_splits)
+    allowed_splits = ("train", "calibration", "test")
+    if (
+        not normalized_splits
+        or len(set(normalized_splits)) != len(normalized_splits)
+        or any(split not in allowed_splits for split in normalized_splits)
+    ):
+        raise DataValidationError("included_splits must be a unique supported subset")
+    if any(split not in pairs_per_class for split in normalized_splits):
+        raise DataValidationError("pairs_per_class is missing an included split")
+
     known_classes = tuple(sorted(bundle.known_classes))
     all_classes = tuple(
         sorted({str(row["class_name"]) for row in bundle.rows})
     )
     pairs: list[TwoViewPair] = []
-    split_classes = {
+    all_split_classes = {
         "train": known_classes,
         "calibration": known_classes,
         "test": all_classes,
     }
     expected_base_counts = {"train": 144, "calibration": 36, "test": 180}
-    for split, classes in split_classes.items():
+    for split in normalized_splits:
+        classes = all_split_classes[split]
         pair_count = int(pairs_per_class[split])
         for class_name in classes:
             class_rows = rows_by_split_class[(split, class_name)]
@@ -297,6 +310,7 @@ def build_fold_pairs(
         bundle=bundle,
         fold_index=fold_index,
         pairs_per_class=pairs_per_class,
+        included_splits=normalized_splits,
     )
     audit["fold_assignment"] = {
         "algorithm_version": FOLD_ALGORITHM_VERSION,
@@ -309,6 +323,7 @@ def build_fold_pairs(
         "every_fold_covers_all_frames": True,
     }
     audit["slot_order"] = slot_order
+    audit["included_splits"] = list(normalized_splits)
     return materialized, audit
 
 
@@ -318,6 +333,7 @@ def validate_fold_pairs(
     bundle: ProcessedBundle,
     fold_index: int,
     pairs_per_class: Mapping[str, int],
+    included_splits: Sequence[str] = ("train", "calibration", "test"),
 ) -> dict[str, Any]:
     errors: list[str] = []
     rows = {str(row["sample_id"]): row for row in bundle.rows}
@@ -358,19 +374,21 @@ def validate_fold_pairs(
                 errors.append(f"{pair.pair_id}: unknown class entered development data")
             base_usage[(pair.split, pair.class_name, sample_id)] += 1
         counts[(pair.split, pair.class_name)] += 1
+    normalized_splits = tuple(str(split) for split in included_splits)
     expected_classes = {
         "train": 7,
         "calibration": 7,
         "test": 10,
     }
-    for split, class_count in expected_classes.items():
+    for split in normalized_splits:
+        class_count = expected_classes[split]
         observed = [value for (item_split, _), value in counts.items() if item_split == split]
         if len(observed) != class_count or set(observed) != {
             int(pairs_per_class[split])
         }:
             errors.append(f"{split}: pair counts are invalid")
     usage_summary: dict[str, dict[str, float | int]] = {}
-    for split in ("train", "calibration", "test"):
+    for split in normalized_splits:
         usages = [
             value
             for (item_split, _, _), value in base_usage.items()
@@ -394,6 +412,7 @@ def validate_fold_pairs(
             "odd_development_even_test": "passed",
             "unknown_development_count_zero": "passed",
             "class_balanced_pair_counts": "passed",
+            "excluded_splits_absent": "passed",
         },
         "pair_count": len(pairs),
         "pair_counts_by_split": dict(Counter(pair.split for pair in pairs)),

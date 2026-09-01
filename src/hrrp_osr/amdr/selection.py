@@ -111,6 +111,10 @@ def load_selection_config(path: str | Path) -> dict[str, Any]:
         errors.append("secondary metric must be calibration_macro_f1")
     if int(selection.get("knn_k", 0)) != 3:
         errors.append("selection KNN k must remain 3")
+    if "require_converged" in selection and not isinstance(
+        selection["require_converged"], bool
+    ):
+        errors.append("selection.require_converged must be boolean")
     selected_reweighting = tuple(selection.get("l21_reweighting", ()))
     if (
         not selected_reweighting
@@ -159,12 +163,22 @@ def _candidate_id(strategy: str, lambda_manifold: float, lambda_sparse: float) -
 def select_best_candidates(
     rows: Sequence[Mapping[str, Any]],
     strategies: Sequence[str] = SUPPORTED_REWEIGHTING,
+    *,
+    require_converged: bool = False,
 ) -> dict[str, dict[str, Any]]:
     selected: dict[str, dict[str, Any]] = {}
     for strategy in strategies:
-        eligible = [dict(row) for row in rows if row["l21_reweighting"] == strategy]
+        completed = [
+            dict(row) for row in rows if row["l21_reweighting"] == strategy
+        ]
+        eligible = (
+            [row for row in completed if row.get("converged") is True]
+            if require_converged
+            else completed
+        )
         if not eligible:
-            raise DataValidationError(f"no completed candidates for {strategy}")
+            reason = "eligible converged" if require_converged else "completed"
+            raise DataValidationError(f"no {reason} candidates for {strategy}")
         eligible.sort(
             key=lambda row: (
                 -float(row["calibration_accuracy"]),
@@ -423,7 +437,12 @@ def run_parameter_selection(
                     },
                 )
 
-    selected = select_best_candidates(completed, selected_reweighting)
+    require_converged = bool(selection.get("require_converged", False))
+    selected = select_best_candidates(
+        completed,
+        selected_reweighting,
+        require_converged=require_converged,
+    )
     boundary = {
         strategy: {
             "lambda_manifold": _is_grid_boundary(
@@ -451,6 +470,7 @@ def run_parameter_selection(
             and any(any(flags.values()) for flags in boundary.values())
         ),
         "boundary_rule": selection["boundary_rule"],
+        "require_converged": require_converged,
         "graph_neighborhood": str(
             model_raw.get("graph_neighborhood", COMPLETE_SAME_CLASS_GRAPH)
         ),

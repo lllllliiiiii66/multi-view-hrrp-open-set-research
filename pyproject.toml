@@ -20,6 +20,7 @@ dev = ["pytest>=8.0"]
 [project.scripts]
 hrrp-p0 = "hrrp_osr.cli:main"
 hrrp-amdr-smoke = "hrrp_osr.amdr.smoke:main"
+hrrp-amdr-p0-closure = "hrrp_osr.amdr.closure:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

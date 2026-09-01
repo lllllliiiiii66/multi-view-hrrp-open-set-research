@@ -1,0 +1,119 @@
+schema_version: 1
+stage: P0
+result_scope: confirmatory_known_only
+closure_id: amdr_p0_closure_known_only_v1
+
+evidence_scope:
+  fold0_used: false
+  unknown_used: false
+  even_angle_test_pairs_generated: false
+  test_features_materialized: false
+  test_metrics_used: false
+  p1_started: false
+
+bundle:
+  dataset_id: hrrp_10class_theta83_hh_v1
+  preprocessing_id: hrrp_padding_complex_gaussian_v1
+  profiles_sha256: 2dd92282c125f0f677cf1f2dfce828781c8ba4385cf9ae552c4a2c56033c3f5b
+  manifest_sha256: 748b9f30629c3b3cbe66c6a1dac30863fdab2d81a214e46d8bc3ef7c6022a08a
+  bundle_sha256: 79176091b5b745e5df5957f1bb4ade7304c1403a4a32e64622e012db67d5a0c5
+  elevation_deg: 83
+  profile_field: TrcsHH
+  profile_length: 601
+
+protocol:
+  protocol_family: amdr_odd_even_two_view_crossfit_v1
+  protocol_id_prefix: amdr_p0_closure_known_only_v1
+  frame_width_deg: 15
+  frame_count: 24
+  development_angle_parity: odd
+  excluded_test_angle_parity: even
+  fold_count: 5
+  forbidden_folds: [0]
+  selection_folds: [1, 2, 3]
+  confirmation_fold: 4
+  known_class_count: 7
+  unknown_class_count: 3
+
+sampling:
+  algorithm: uniform_ordered_cross_frame_balanced_base_usage
+  slot_order: randomized_seeded
+  base_seed: 20260830
+  distinct_frames: true
+  duplicate_unordered_pairs: false
+  included_splits: [train, calibration]
+  pairs_per_class:
+    train: 500
+    calibration: 500
+
+preprocessing:
+  source_representation: power_decibel
+  transform: power_db_to_peak_relative_amplitude_v1
+  formula: 10 ** ((x_db - max(x_db)) / 20)
+  output_representation: peak_relative_linear_amplitude
+  dimension_reduction: none
+
+model:
+  algorithm_version: amdr_research_v1
+  implementation_scope: amdr_p0_closure_code_reference_v1
+  reference_role: stable_code_reference_close_to_attachment_not_paper_irls
+  view_count: 2
+  graph_neighborhood: complete_same_class_inverse_distance_v1
+  graph_same_base_policy: allow_same_base_v1
+  l21_reweighting: fixed_initial
+  objective_scaling: sample_class_mean_v1
+  max_iterations: 300
+  minimum_iterations: 3
+  tolerance: 3.0e-5
+  convergence_metric: relative_state_change_v1
+  numerical_epsilon: 1.0e-10
+  solve_ridge: 1.0e-10
+  initialization_seed: 20260830
+  post_training_row_prune_squared_norm_threshold: 0.0
+
+selection:
+  split: calibration
+  require_converged: true
+  minimum_alpha: 0.05
+  lambda_manifold: [10.0, 100.0, 1000.0]
+  lambda_sparse: [2.857142857142857e-4]
+  primary_metric: mean_calibration_accuracy
+  secondary_metric: mean_calibration_macro_f1
+  tie_break_order:
+    - higher_mean_calibration_accuracy
+    - higher_mean_calibration_macro_f1
+    - lower_lambda_manifold
+    - lower_lambda_sparse
+  expand_grid: false
+
+knn:
+  k: 3
+  distance: squared_euclidean
+  raw_reference: concatenate_view1_view2
+  normalization: none
+
+decision:
+  primary_minimum_accuracy_gain: 0.02
+  primary_minimum_macro_f1_gain: 0.0
+  auxiliary_accuracy_delta_strictly_greater_than: -0.02
+  auxiliary_macro_f1_delta_strictly_greater_than: -0.02
+  alpha_collapse_threshold: 0.05
+  threshold_interpretation: engineering_decision_not_statistical_significance
+
+checkpoint:
+  strategy: latest_only_atomic_replace
+  every_iterations: 5
+  selection: none_no_validation_best
+  includes_alternating_state: true
+  resume_requires_same_data_order_and_model_config: true
+
+outputs:
+  namespace: artifacts/amdr/p0_closure
+  save_resolved_config_per_candidate: true
+  save_pair_manifest_per_fold: true
+  save_model: true
+  save_training_log: true
+  save_calibration_predictions: true
+  save_environment: true
+  save_artifact_hashes: true
+

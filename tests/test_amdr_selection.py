@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+from hrrp_osr.data.errors import DataValidationError
 from hrrp_osr.amdr.model import (
     FIXED_INITIAL_L21_REWEIGHTING,
     UPDATE_EACH_ITERATION_L21_REWEIGHTING,
@@ -116,3 +119,83 @@ def test_select_best_candidates_uses_registered_tie_breaks() -> None:
 
     selected = select_best_candidates(rows)
     assert all(row["candidate_id"].endswith("-small") for row in selected.values())
+
+
+def test_require_converged_excludes_higher_nonconverged_candidate() -> None:
+    rows = [
+        {
+            "candidate_id": "nonconverged",
+            "l21_reweighting": FIXED_INITIAL_L21_REWEIGHTING,
+            "lambda_manifold": 1.0,
+            "lambda_sparse": 1.0,
+            "calibration_accuracy": 0.9,
+            "calibration_macro_f1": 0.9,
+            "converged": False,
+        },
+        {
+            "candidate_id": "converged",
+            "l21_reweighting": FIXED_INITIAL_L21_REWEIGHTING,
+            "lambda_manifold": 10.0,
+            "lambda_sparse": 1.0,
+            "calibration_accuracy": 0.8,
+            "calibration_macro_f1": 0.8,
+            "converged": True,
+        },
+    ]
+    selected = select_best_candidates(
+        rows,
+        strategies=[FIXED_INITIAL_L21_REWEIGHTING],
+        require_converged=True,
+    )
+    assert selected[FIXED_INITIAL_L21_REWEIGHTING]["candidate_id"] == "converged"
+
+
+def test_require_converged_fails_when_all_candidates_are_nonconverged() -> None:
+    rows = [
+        {
+            "candidate_id": "nonconverged",
+            "l21_reweighting": FIXED_INITIAL_L21_REWEIGHTING,
+            "lambda_manifold": 1.0,
+            "lambda_sparse": 1.0,
+            "calibration_accuracy": 0.9,
+            "calibration_macro_f1": 0.9,
+            "converged": False,
+        }
+    ]
+    with pytest.raises(DataValidationError, match="no eligible converged"):
+        select_best_candidates(
+            rows,
+            strategies=[FIXED_INITIAL_L21_REWEIGHTING],
+            require_converged=True,
+        )
+
+
+def test_historical_selection_without_convergence_gate_is_unchanged() -> None:
+    rows = [
+        {
+            "candidate_id": "higher-nonconverged",
+            "l21_reweighting": FIXED_INITIAL_L21_REWEIGHTING,
+            "lambda_manifold": 1.0,
+            "lambda_sparse": 1.0,
+            "calibration_accuracy": 0.9,
+            "calibration_macro_f1": 0.9,
+            "converged": False,
+        },
+        {
+            "candidate_id": "lower-converged",
+            "l21_reweighting": FIXED_INITIAL_L21_REWEIGHTING,
+            "lambda_manifold": 10.0,
+            "lambda_sparse": 1.0,
+            "calibration_accuracy": 0.8,
+            "calibration_macro_f1": 0.8,
+            "converged": True,
+        },
+    ]
+    selected = select_best_candidates(
+        rows,
+        strategies=[FIXED_INITIAL_L21_REWEIGHTING],
+    )
+    assert (
+        selected[FIXED_INITIAL_L21_REWEIGHTING]["candidate_id"]
+        == "higher-nonconverged"
+    )
