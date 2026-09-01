@@ -125,3 +125,18 @@ def test_local_graph_lambda2_base_changes_only_registered_graph_mechanism() -> N
     assert local["model"]["l21_reweighting"] == FIXED_INITIAL_L21_REWEIGHTING
     assert local["model"]["graph_neighborhood"] == LOCAL_KNN_GAUSSIAN_GRAPH
     assert local["model"]["graph_neighbor_count"] == 10
+
+
+def test_posthoc_local_graph_selected_config_is_explicitly_diagnostic() -> None:
+    config = load_smoke_config(
+        PROJECT_ROOT
+        / "configs"
+        / "amdr"
+        / "pilot_fold0_amplitude_pruned_fixed_d_local_knn_lambda2_posthoc_selected_v1.yaml"
+    )
+    assert config["model"]["lambda_manifold"] == 1.0
+    assert config["model"]["lambda_sparse"] == 50.0
+    assert config["model"]["l21_reweighting"] == FIXED_INITIAL_L21_REWEIGHTING
+    assert config["diagnostic_parent"]["posthoc_after_fold0_test_seen"] is True
+    assert config["diagnostic_parent"]["confirmatory_claim_allowed"] is False
+    assert config["parameter_selection"]["test_metrics_used"] is False
