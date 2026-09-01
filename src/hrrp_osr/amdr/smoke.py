@@ -33,6 +33,8 @@ from hrrp_osr.amdr.model import (
     COMPLETE_SAME_CLASS_GRAPH,
     EXCLUDE_SAME_BASE_GRAPH,
     FIXED_INITIAL_L21_REWEIGHTING,
+    LEGACY_UNNORMALIZED_OBJECTIVE,
+    SAMPLE_CLASS_MEAN_OBJECTIVE,
     LOCAL_KNN_GAUSSIAN_GRAPH,
     RELATIVE_STATE_CHANGE,
     UPDATE_EACH_ITERATION_L21_REWEIGHTING,
@@ -166,8 +168,12 @@ def load_smoke_config(path: str | Path) -> dict[str, Any]:
             "amdr_research_v1_alignment_diagnostic",
             "amdr_research_v1_local_graph_diagnostic",
             "amdr_research_v1_overfit_diagnostic",
+            "amdr_research_v1_scale_normalized_diagnostic",
         },
-        "diagnostic_sample_scale": "amdr_research_v1_local_graph_diagnostic",
+        "diagnostic_sample_scale": {
+            "amdr_research_v1_local_graph_diagnostic",
+            "amdr_research_v1_scale_normalized_diagnostic",
+        },
     }.get(result_scope)
     implementation_scope = model.get("implementation_scope")
     if isinstance(expected_implementation_scope, set):
@@ -197,6 +203,11 @@ def load_smoke_config(path: str | Path) -> dict[str, Any]:
         UPDATE_EACH_ITERATION_L21_REWEIGHTING,
     }:
         errors.append("model l21_reweighting is invalid")
+    if model.get("objective_scaling", LEGACY_UNNORMALIZED_OBJECTIVE) not in {
+        LEGACY_UNNORMALIZED_OBJECTIVE,
+        SAMPLE_CLASS_MEAN_OBJECTIVE,
+    }:
+        errors.append("model objective_scaling is invalid")
     max_iterations = int(model.get("max_iterations", 0))
     max_allowed = 5 if result_scope == "diagnostic_smoke" else 300
     if not 1 <= max_iterations <= max_allowed:
@@ -519,6 +530,9 @@ def run_smoke(
             model_raw.get(
                 "l21_reweighting", UPDATE_EACH_ITERATION_L21_REWEIGHTING
             )
+        ),
+        objective_scaling=str(
+            model_raw.get("objective_scaling", LEGACY_UNNORMALIZED_OBJECTIVE)
         ),
     )
     checkpoint_raw = _mapping(config.get("checkpoint", {}), "checkpoint")

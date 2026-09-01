@@ -7,7 +7,9 @@ from hrrp_osr.data.errors import DataValidationError
 from hrrp_osr.amdr.model import (
     EXCLUDE_SAME_BASE_GRAPH,
     FIXED_INITIAL_L21_REWEIGHTING,
+    LEGACY_UNNORMALIZED_OBJECTIVE,
     LOCAL_KNN_GAUSSIAN_GRAPH,
+    SAMPLE_CLASS_MEAN_OBJECTIVE,
     AMDRFitResult,
     AMDRModelConfig,
     fit_amdr,
@@ -129,6 +131,76 @@ def test_amdr_fit_project_and_knn_smoke_are_finite_and_directional() -> None:
         k=3,
     )
     assert float(np.median(unknown_scores)) > float(np.median(known_scores))
+
+
+def test_sample_class_mean_objective_matches_balanced_legacy_rescaling() -> None:
+    train_views, train_labels = _synthetic_views(67, 4)
+    sample_count = train_labels.size
+    samples_per_class = 4
+    view_count = len(train_views)
+    legacy = fit_amdr(
+        train_views,
+        train_labels,
+        AMDRModelConfig(
+            lambda_manifold=0.7,
+            lambda_sparse=1.3,
+            max_iterations=3,
+            minimum_iterations=1,
+            tolerance=1.0e-30,
+            numerical_epsilon=1.0e-10,
+            solve_ridge=1.0e-6,
+            initialization_seed=71,
+            l21_reweighting=FIXED_INITIAL_L21_REWEIGHTING,
+            objective_scaling=LEGACY_UNNORMALIZED_OBJECTIVE,
+        ),
+    )
+    normalized = fit_amdr(
+        train_views,
+        train_labels,
+        AMDRModelConfig(
+            lambda_manifold=0.7 * view_count * samples_per_class,
+            lambda_sparse=1.3 / sample_count,
+            max_iterations=3,
+            minimum_iterations=1,
+            tolerance=1.0e-30,
+            numerical_epsilon=1.0e-10,
+            solve_ridge=1.0e-6 / sample_count,
+            initialization_seed=71,
+            l21_reweighting=FIXED_INITIAL_L21_REWEIGHTING,
+            objective_scaling=SAMPLE_CLASS_MEAN_OBJECTIVE,
+        ),
+    )
+
+    np.testing.assert_allclose(
+        normalized.weights, legacy.weights, rtol=1e-9, atol=1e-11
+    )
+    np.testing.assert_allclose(normalized.alpha, legacy.alpha, rtol=1e-9, atol=1e-11)
+    for legacy_row, normalized_row in zip(legacy.history, normalized.history):
+        assert normalized_row["objective_scaling"] == SAMPLE_CLASS_MEAN_OBJECTIVE
+        assert normalized_row["objective"] == pytest.approx(
+            legacy_row["objective"] / sample_count,
+            rel=1e-9,
+            abs=1e-11,
+        )
+
+
+def test_amdr_rejects_unknown_objective_scaling_policy() -> None:
+    train_views, train_labels = _synthetic_views(73, 4)
+    with pytest.raises(DataValidationError, match="objective scaling"):
+        fit_amdr(
+            train_views,
+            train_labels,
+            AMDRModelConfig(
+                lambda_manifold=1.0,
+                lambda_sparse=1.0,
+                max_iterations=2,
+                tolerance=1.0e-5,
+                numerical_epsilon=1.0e-10,
+                solve_ridge=1.0e-6,
+                initialization_seed=79,
+                objective_scaling="unknown",
+            ),
+        )
 
 
 def test_latest_checkpoint_resume_matches_uninterrupted_fit(tmp_path) -> None:

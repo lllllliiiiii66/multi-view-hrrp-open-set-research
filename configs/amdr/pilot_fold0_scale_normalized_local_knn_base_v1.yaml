@@ -1,0 +1,109 @@
+schema_version: 1
+protocol_id: amdr_10class_odd_even_crossfit_pilot_fold0_v1
+stage: P0
+result_scope: diagnostic_pilot
+protocol_family: amdr_odd_even_two_view_crossfit_v1
+diagnostic_variant_id: scale_normalized_local_knn_base_v1
+
+diagnostic_parent:
+  config: configs/amdr/pilot_fold0_amplitude_pruned_fixed_d_local_knn_lambda2_posthoc_selected_v1.yaml
+  controlled_change: objective_term_scaling_only_before_parameter_reselection
+  test_metrics_used_for_design: false
+  posthoc_after_fold0_test_seen: true
+  confirmatory_claim_allowed: false
+
+objective_scaling_control:
+  regression: mean_over_training_pairs
+  manifold: mean_over_views_classes_and_class_pairs
+  sparse: unscaled_l21
+  ridge: normalized_system_scale
+  legacy_equivalent_at_500_pairs_per_class:
+    lambda_manifold: 1000.0
+    lambda_sparse: 0.014285714285714285
+    solve_ridge: 2.857142857142857e-10
+
+bundle:
+  dataset_id: hrrp_10class_theta83_hh_v1
+  preprocessing_id: hrrp_padding_complex_gaussian_v1
+  profiles_sha256: 2dd92282c125f0f677cf1f2dfce828781c8ba4385cf9ae552c4a2c56033c3f5b
+  manifest_sha256: 748b9f30629c3b3cbe66c6a1dac30863fdab2d81a214e46d8bc3ef7c6022a08a
+  bundle_sha256: 79176091b5b745e5df5957f1bb4ade7304c1403a4a32e64622e012db67d5a0c5
+  elevation_deg: 83
+  profile_field: TrcsHH
+  profile_length: 601
+
+protocol:
+  frame_width_deg: 15
+  frame_count: 24
+  development_angle_parity: odd
+  test_angle_parity: even
+  fold_count: 5
+  fold_index: 0
+  known_class_count: 7
+  unknown_class_count: 3
+  test_unknown_used_for_selection: false
+
+sampling:
+  algorithm: uniform_ordered_cross_frame_balanced_base_usage
+  slot_order: randomized_seeded
+  base_seed: 20260830
+  distinct_frames: true
+  duplicate_unordered_pairs: false
+  pairs_per_class:
+    train: 500
+    calibration: 500
+    test: 500
+
+preprocessing:
+  source_representation: power_decibel
+  transform: power_db_to_peak_relative_amplitude_v1
+  formula: 10 ** ((x_db - max(x_db)) / 20)
+  output_representation: peak_relative_linear_amplitude
+  output_max_per_profile: 1.0
+  fit_population: none_per_profile_deterministic
+  status: diagnostic_reference_semantics
+
+model:
+  algorithm_version: amdr_research_v1
+  implementation_scope: amdr_research_v1_scale_normalized_diagnostic
+  reference_role: diagnostic_method_variant_not_attachment_reproduction
+  view_count: 2
+  objective_scaling: sample_class_mean_v1
+  lambda_manifold: 1000.0
+  lambda_sparse: 0.01
+  max_iterations: 300
+  minimum_iterations: 3
+  tolerance: 3.0e-5
+  convergence_metric: relative_state_change_v1
+  numerical_epsilon: 1.0e-10
+  solve_ridge: 1.0e-10
+  initialization_seed: 20260830
+  l21_reweighting: fixed_initial
+  graph_neighborhood: local_knn_gaussian_v1
+  graph_neighbor_count: 10
+  graph_initialization: input_space_local_knn_gaussian_v1
+  graph_storage: dense_class_blocks_logically_sparse
+  post_training_row_prune_squared_norm_threshold: 1.0e-5
+
+checkpoint:
+  strategy: latest_only_atomic_replace
+  every_iterations: 5
+  selection: none_no_validation_best
+  includes_alternating_state: true
+  resume_requires_same_data_order_and_model_config: true
+
+knn:
+  k: 3
+  distance: squared_euclidean
+  unknown_score: mean_k_neighbor_squared_distance
+  score_direction: larger_is_more_unknown
+  known_acceptance_rate: 0.95
+  threshold_source: current_fold_known_calibration_only
+
+outputs:
+  save_pair_manifest: true
+  save_model: true
+  save_projections: true
+  save_predictions: true
+  save_environment: true
+  diagnostic_only: true

@@ -12,6 +12,7 @@ from hrrp_osr.amdr.model import (
     EXCLUDE_SAME_BASE_GRAPH,
     FIXED_INITIAL_L21_REWEIGHTING,
     LOCAL_KNN_GAUSSIAN_GRAPH,
+    SAMPLE_CLASS_MEAN_OBJECTIVE,
     UPDATE_EACH_ITERATION_L21_REWEIGHTING,
 )
 from hrrp_osr.amdr.reduction import SHARED_TRAIN_BASE_PCA
@@ -167,3 +168,19 @@ def test_train2000_control_changes_only_training_pair_count() -> None:
     assert candidate["sample_size_control"]["independent_train_base_profiles_per_known_class_unchanged"] == 144
     assert candidate["diagnostic_parent"]["posthoc_after_fold0_test_seen"] is True
     assert candidate["diagnostic_parent"]["confirmatory_claim_allowed"] is False
+
+
+def test_scale_normalized_base_is_separate_and_known_only_selected() -> None:
+    base = load_smoke_config(
+        PROJECT_ROOT
+        / "configs"
+        / "amdr"
+        / "pilot_fold0_scale_normalized_local_knn_base_v1.yaml"
+    )
+    assert base["result_scope"] == "diagnostic_pilot"
+    assert base["model"]["objective_scaling"] == SAMPLE_CLASS_MEAN_OBJECTIVE
+    assert base["model"]["implementation_scope"] == (
+        "amdr_research_v1_scale_normalized_diagnostic"
+    )
+    assert base["diagnostic_parent"]["posthoc_after_fold0_test_seen"] is True
+    assert base["diagnostic_parent"]["confirmatory_claim_allowed"] is False

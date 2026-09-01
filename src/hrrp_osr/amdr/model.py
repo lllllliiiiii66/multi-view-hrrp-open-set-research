@@ -22,6 +22,8 @@ COMPLETE_SAME_CLASS_GRAPH = "complete_same_class_inverse_distance_v1"
 LOCAL_KNN_GAUSSIAN_GRAPH = "local_knn_gaussian_v1"
 FIXED_INITIAL_L21_REWEIGHTING = "fixed_initial"
 UPDATE_EACH_ITERATION_L21_REWEIGHTING = "update_each_iteration"
+LEGACY_UNNORMALIZED_OBJECTIVE = "legacy_unnormalized_v1"
+SAMPLE_CLASS_MEAN_OBJECTIVE = "sample_class_mean_v1"
 
 
 @dataclass(frozen=True)
@@ -39,6 +41,7 @@ class AMDRModelConfig:
     graph_neighborhood: str = COMPLETE_SAME_CLASS_GRAPH
     graph_neighbor_count: int = 10
     l21_reweighting: str = UPDATE_EACH_ITERATION_L21_REWEIGHTING
+    objective_scaling: str = LEGACY_UNNORMALIZED_OBJECTIVE
 
 
 @dataclass(frozen=True)
@@ -130,6 +133,11 @@ def _validate_fit_inputs(
         UPDATE_EACH_ITERATION_L21_REWEIGHTING,
     }:
         errors.append("unsupported l21 reweighting policy")
+    if config.objective_scaling not in {
+        LEGACY_UNNORMALIZED_OBJECTIVE,
+        SAMPLE_CLASS_MEAN_OBJECTIVE,
+    }:
+        errors.append("unsupported objective scaling policy")
     if errors:
         raise DataValidationError("Invalid AMDR fit input:\n- " + "\n- ".join(errors))
     return materialized, y, int(unique.size)
@@ -181,6 +189,8 @@ def _config_signature(config: AMDRModelConfig) -> dict[str, Any]:
         signature["graph_neighbor_count"] = config.graph_neighbor_count
     if config.l21_reweighting != UPDATE_EACH_ITERATION_L21_REWEIGHTING:
         signature["l21_reweighting"] = config.l21_reweighting
+    if config.objective_scaling != LEGACY_UNNORMALIZED_OBJECTIVE:
+        signature["objective_scaling"] = config.objective_scaling
     return signature
 
 
@@ -562,6 +572,10 @@ def fit_amdr(
         history = [dict(row) for row in resume_checkpoint.history]
         start_iteration = resume_checkpoint.iteration_completed
     class_indices = [np.flatnonzero(y == label) for label in range(class_count)]
+    normalized_objective = (
+        config.objective_scaling == SAMPLE_CLASS_MEAN_OBJECTIVE
+    )
+    regression_scale = 1.0 / sample_count if normalized_objective else 1.0
     converged = bool(
         history
         and start_iteration >= config.minimum_iterations
@@ -597,7 +611,14 @@ def fit_amdr(
                     - squared_graph.T
                 )
                 class_view = view[indices]
-                manifold += len(indices) * (class_view.T @ laplacian @ class_view)
+                manifold_scale = (
+                    1.0 / (len(materialized) * class_count * len(indices))
+                    if normalized_objective
+                    else float(len(indices))
+                )
+                manifold += manifold_scale * (
+                    class_view.T @ laplacian @ class_view
+                )
             manifold_blocks.append(manifold)
         manifold_all = block_diag(*manifold_blocks)
 
@@ -613,7 +634,7 @@ def fit_amdr(
             ]
         )
         system = (
-            combined.T @ combined
+            regression_scale * (combined.T @ combined)
             + config.lambda_manifold * manifold_all
         )
         diagonal_regularizer = (
@@ -624,7 +645,7 @@ def fit_amdr(
         )
         diagonal = np.diag_indices_from(system)
         system[diagonal] += diagonal_regularizer + config.solve_ridge
-        right_hand_side = combined.T @ adjusted_target
+        right_hand_side = regression_scale * (combined.T @ adjusted_target)
         weights = np.linalg.solve(system, right_hand_side)
         if not np.isfinite(weights).all():
             raise DataValidationError("AMDR W update produced NaN or Inf")
@@ -663,7 +684,12 @@ def fit_amdr(
                         row_sums, config.numerical_epsilon
                     )
                 graphs[view_index][label] = updated_graph
-                manifold_raw += len(indices) * float(
+                manifold_scale = (
+                    1.0 / (len(materialized) * class_count * len(indices))
+                    if normalized_objective
+                    else float(len(indices))
+                )
+                manifold_raw += manifold_scale * float(
                     np.sum(updated_graph * updated_graph * distances)
                 )
         alpha = _alpha_from_weights(
@@ -700,7 +726,7 @@ def fit_amdr(
             if config.convergence_metric == RELATIVE_STATE_CHANGE
             else absolute_delta
         )
-        regression_loss = float(
+        regression_loss = regression_scale * float(
             np.sum((combined @ weights - adjusted_target) ** 2)
         )
         sparse_raw = sum(
@@ -723,6 +749,7 @@ def fit_amdr(
                 "graph_neighborhood": config.graph_neighborhood,
                 "graph_neighbor_count": config.graph_neighbor_count,
                 "l21_reweighting": config.l21_reweighting,
+                "objective_scaling": config.objective_scaling,
                 "convergence_value": convergence_value,
                 "weight_frobenius_norm": float(np.linalg.norm(weights)),
                 "alpha": alpha.tolist(),

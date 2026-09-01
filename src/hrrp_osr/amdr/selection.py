@@ -24,6 +24,7 @@ from hrrp_osr.amdr.model import (
     COMPLETE_SAME_CLASS_GRAPH,
     EXCLUDE_SAME_BASE_GRAPH,
     FIXED_INITIAL_L21_REWEIGHTING,
+    LEGACY_UNNORMALIZED_OBJECTIVE,
     UPDATE_EACH_ITERATION_L21_REWEIGHTING,
     AMDRModelConfig,
     fit_amdr,
@@ -332,6 +333,11 @@ def run_parameter_selection(
                         model_raw.get("graph_neighbor_count", 10)
                     ),
                     l21_reweighting=strategy,
+                    objective_scaling=str(
+                        model_raw.get(
+                            "objective_scaling", LEGACY_UNNORMALIZED_OBJECTIVE
+                        )
+                    ),
                 )
                 view_group_ids = (
                     (
@@ -367,6 +373,7 @@ def run_parameter_selection(
                     "selection_config_sha256": config["_config_sha256"],
                     "base_config_sha256": base["_config_sha256"],
                     "l21_reweighting": strategy,
+                    "objective_scaling": model_config.objective_scaling,
                     "graph_neighborhood": model_config.graph_neighborhood,
                     "graph_neighbor_count": model_config.graph_neighbor_count,
                     "lambda_manifold": lambda_manifold,
