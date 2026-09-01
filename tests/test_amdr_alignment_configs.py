@@ -184,3 +184,30 @@ def test_scale_normalized_base_is_separate_and_known_only_selected() -> None:
     )
     assert base["diagnostic_parent"]["posthoc_after_fold0_test_seen"] is True
     assert base["diagnostic_parent"]["confirmatory_claim_allowed"] is False
+
+
+def test_scale_normalized_sample_control_changes_only_training_pair_count() -> None:
+    reference = load_smoke_config(
+        PROJECT_ROOT
+        / "configs"
+        / "amdr"
+        / "pilot_fold0_scale_normalized_selected_v1.yaml"
+    )
+    candidate = load_smoke_config(
+        PROJECT_ROOT
+        / "configs"
+        / "amdr"
+        / "pilot_fold0_scale_normalized_selected_train2000_control_v1.yaml"
+    )
+    assert candidate["bundle"] == reference["bundle"]
+    assert candidate["protocol"] == reference["protocol"]
+    assert candidate["preprocessing"] == reference["preprocessing"]
+    assert candidate["model"] == reference["model"]
+    assert candidate["knn"] == reference["knn"]
+    assert candidate["sampling"] == {
+        **reference["sampling"],
+        "pairs_per_class": {"train": 2000, "calibration": 500, "test": 500},
+    }
+    assert candidate["sample_size_control"][
+        "objective_scaling_and_parameters_unchanged"
+    ] is True
