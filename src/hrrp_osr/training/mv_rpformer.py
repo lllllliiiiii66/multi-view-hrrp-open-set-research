@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import fcntl
 import hashlib
 import io
 import json
@@ -85,6 +86,7 @@ COMPARISONS = {
 TASK_SOURCE_FILES = (
     "configs/experiments/arpl/mv_rpformer_surrogate_v1.yaml",
     "src/hrrp_osr/models/arpl.py",
+    "src/hrrp_osr/models/cnn1d.py",
     "src/hrrp_osr/models/hrrp_ms_resnet.py",
     "src/hrrp_osr/models/mv_rpformer.py",
     "src/hrrp_osr/training/arpl_pilot.py",
@@ -1133,6 +1135,17 @@ def train_one_method(
     )
     project_root = Path(config["_config_path"]).parents[3]
     source_hashes = task_source_hashes(project_root)
+    runtime_contract = {
+        "device": str(device),
+        "device_type": device.type,
+        "torch_version": torch.__version__,
+        "numpy_version": np.__version__,
+        "cuda_version": torch.version.cuda,
+        "cublas_workspace_config": os.environ.get("CUBLAS_WORKSPACE_CONFIG"),
+        "torch_intraop_threads": torch.get_num_threads(),
+        "torch_interop_threads": torch.get_num_interop_threads(),
+        "deterministic_algorithms": bool(training["deterministic_algorithms"]),
+    }
     epochs = int(training["smoke_epochs"] if mode == "smoke" else training["total_epochs"])
     log: list[dict[str, Any]] = []
     start_epoch = 1
@@ -1146,6 +1159,7 @@ def train_one_method(
             mode,
             tuple(prepared.train_class_order),
             source_hashes,
+            runtime_contract,
         )
         observed = (
             state.get("method"),
@@ -1155,6 +1169,7 @@ def train_one_method(
             state.get("mode"),
             tuple(state.get("train_class_order", ())),
             state.get("source_hashes"),
+            state.get("runtime_contract"),
         )
         if observed != expected:
             raise DataValidationError("resume checkpoint contract differs")
@@ -1314,6 +1329,7 @@ def train_one_method(
                     "config_sha256": config["_config_sha256"],
                     "train_class_order": prepared.train_class_order,
                     "source_hashes": source_hashes,
+                    "runtime_contract": runtime_contract,
                     "completed_epoch": epoch,
                     "model_state_dict": model.state_dict(),
                     "optimizer_state_dict": optimizer.state_dict(),
@@ -1352,6 +1368,7 @@ def train_one_method(
         "training_log": log,
         "pseudo_audit": audit,
         "source_hashes": source_hashes,
+        "runtime_contract": runtime_contract,
         "final_known_calibration_accuracy": log[-1][
             "known_calibration_accuracy_diagnostic"
         ],
@@ -1696,7 +1713,7 @@ def _quarantine_path(path: Path, *, phase_root: Path, reason: str) -> Path:
     return quarantine
 
 
-def run_single_method(
+def _run_single_method_unlocked(
     config_path: str | Path,
     bundle_root: str | Path,
     phase_root: str | Path,
@@ -1737,7 +1754,7 @@ def run_single_method(
                     phase_root=root,
                     reason="redundant_completed_work",
                 )
-            return {"status": "already_complete", **audited}
+            return {**audited, "status": "already_complete"}
         raise DataValidationError(f"method output already exists: {destination}")
     destination.parent.mkdir(parents=True, exist_ok=True)
     work_root = destination.parent / f".{method}.work"
@@ -1874,6 +1891,55 @@ def run_single_method(
     if work_root.exists() and not any(work_root.iterdir()):
         work_root.rmdir()
     return summary
+
+
+def run_single_method(
+    config_path: str | Path,
+    bundle_root: str | Path,
+    phase_root: str | Path,
+    *,
+    phase: str,
+    split_id: str,
+    seed: int,
+    method: str,
+    device_request: str = "auto",
+    development_root: str | Path | None = None,
+    resume: bool = False,
+) -> dict[str, Any]:
+    """Run one frozen unit while preventing duplicate concurrent writers."""
+
+    root = Path(phase_root).resolve()
+    lock_path = (
+        root.parent
+        / "_locks"
+        / root.name
+        / split_id
+        / f"seed_{seed}"
+        / f"{method}.lock"
+    )
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a+b") as lock_handle:
+        try:
+            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            raise DataValidationError(
+                f"the same split/seed/method is already running: {split_id}/{seed}/{method}"
+            ) from error
+        try:
+            return _run_single_method_unlocked(
+                config_path,
+                bundle_root,
+                phase_root,
+                phase=phase,
+                split_id=split_id,
+                seed=seed,
+                method=method,
+                device_request=device_request,
+                development_root=development_root,
+                resume=resume,
+            )
+        finally:
+            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
 
 
 def audit_method_result(
@@ -2449,6 +2515,16 @@ def _load_metric_csv(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def _load_paired_delta_csv(path: Path) -> list[dict[str, Any]]:
+    with path.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    for row in rows:
+        row["seed"] = int(row["seed"])
+        for key in METRIC_KEYS:
+            row[f"delta_{key}"] = float(row[f"delta_{key}"])
+    return rows
+
+
 def run_phase(
     config_path: str | Path,
     bundle_root: str | Path,
@@ -2466,7 +2542,7 @@ def run_phase(
             raise DataConfigError("confirmation requires a completed development root")
         verify_development_authorization(config_path, development_root)
     output = Path(output_root).resolve()
-    if (output / "summary.json").is_file() and resume:
+    if (output / "_PHASE_SUCCESS.json").is_file() and resume:
         audit_phase_root(config_path, output, phase=phase, verify_root_hashes=True)
         return json.loads((output / "summary.json").read_text())
     if output.exists() and any(output.iterdir()) and not resume:
@@ -2494,6 +2570,8 @@ def finalize_results(
     development_root: str | Path,
     confirmation_root: str | Path,
     output_path: str | Path,
+    *,
+    resume: bool = False,
 ) -> dict[str, Any]:
     development = Path(development_root).resolve()
     confirmation = Path(confirmation_root).resolve()
@@ -2511,18 +2589,62 @@ def finalize_results(
     paired = summary.pop("paired_delta_rows")
     destination = Path(output_path).resolve()
     paired_destination = destination.with_suffix(".paired_deltas.csv")
-    if destination.exists() or paired_destination.exists():
-        raise DataValidationError("final result or paired-delta path already exists")
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    _write_json(destination, {
+    success_destination = destination.with_suffix(".success.json")
+    expected_document = {
         **summary,
         "development_root": str(development),
         "confirmation_root": str(confirmation),
         "config_sha256": config["_config_sha256"],
         "final_unknown_used": False,
         "even_angle_test_used": False,
-    })
+    }
+    existing = [
+        path
+        for path in (destination, paired_destination, success_destination)
+        if path.exists()
+    ]
+    if success_destination.is_file():
+        if not resume:
+            raise DataValidationError("final result is already complete")
+        stored_document = json.loads(destination.read_text())
+        stored_rows = _load_paired_delta_csv(paired_destination)
+        success = json.loads(success_destination.read_text())
+        expected_success = {
+            "status": "complete",
+            "config_sha256": config["_config_sha256"],
+            "result_sha256": file_sha256(destination),
+            "paired_deltas_sha256": file_sha256(paired_destination),
+        }
+        if (
+            stored_document != expected_document
+            or stored_rows != paired
+            or success != expected_success
+        ):
+            raise DataValidationError("completed final result failed re-audit")
+        return summary
+    if existing and not resume:
+        raise DataValidationError("incomplete final result exists")
+    if existing:
+        quarantine = (
+            destination.parent
+            / "_quarantine"
+            / f"interrupted_finalize_{time.time_ns()}"
+        )
+        quarantine.mkdir(parents=True, exist_ok=False)
+        for path in existing:
+            path.replace(quarantine / path.name)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    _write_json(destination, expected_document)
     _write_csv(paired_destination, paired)
+    _write_json(
+        success_destination,
+        {
+            "status": "complete",
+            "config_sha256": config["_config_sha256"],
+            "result_sha256": file_sha256(destination),
+            "paired_deltas_sha256": file_sha256(paired_destination),
+        },
+    )
     return summary
 
 
@@ -2616,7 +2738,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.development_root is None or args.confirmation_root is None or args.output is None:
             parser.error("finalize requires development-root, confirmation-root, and output")
         result = finalize_results(
-            args.config, args.development_root, args.confirmation_root, args.output
+            args.config,
+            args.development_root,
+            args.confirmation_root,
+            args.output,
+            resume=args.resume,
         )
     print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
     return 0

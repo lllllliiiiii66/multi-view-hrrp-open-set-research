@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import fcntl
 from pathlib import Path
 
 import numpy as np
@@ -31,6 +32,7 @@ from hrrp_osr.training.mv_rpformer import (  # noqa: E402
     require_train_known_pseudo_source,
     sample_cross_class_indices,
     sample_cross_class_mismatch,
+    run_single_method,
     summarize_paired_comparisons,
     train_one_method,
     truncated_beta_lambdas,
@@ -425,6 +427,22 @@ def test_epoch_checkpoint_resume_is_exact_across_rejector_activation(tmp_path: P
             resume_checkpoint=checkpoint,
             _interrupt_after_epoch=1,
         )
+    incompatible = tmp_path / "incompatible.pt"
+    checkpoint_state = torch.load(checkpoint, map_location="cpu", weights_only=False)
+    checkpoint_state["runtime_contract"]["device_type"] = "cuda"
+    torch.save(checkpoint_state, incompatible)
+    incompatible_models, _ = build_initialized_method_group(5, seed=44, config=config)
+    with pytest.raises(DataValidationError, match="resume checkpoint contract differs"):
+        train_one_method(
+            incompatible_models[method],
+            method=method,
+            prepared=prepared,
+            seed=44,
+            config=config,
+            mode="smoke",
+            device=torch.device("cpu"),
+            resume_checkpoint=incompatible,
+        )
     resumed_models, _ = build_initialized_method_group(5, seed=44, config=config)
     resumed = train_one_method(
         resumed_models[method],
@@ -446,3 +464,31 @@ def test_epoch_checkpoint_resume_is_exact_across_rejector_activation(tmp_path: P
         assert {k: v for k, v in first.items() if k != "elapsed_seconds"} == {
             k: v for k, v in second.items() if k != "elapsed_seconds"
         }
+
+
+def test_duplicate_train_unit_lock_fails_before_touching_bundle(tmp_path: Path) -> None:
+    phase_root = tmp_path / "phase"
+    method = "M0_CURRENT_CE_MEAN"
+    lock_path = (
+        tmp_path
+        / "_locks"
+        / phase_root.name
+        / "S0"
+        / "seed_20260830"
+        / f"{method}.lock"
+    )
+    lock_path.parent.mkdir(parents=True)
+    with lock_path.open("a+b") as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        with pytest.raises(DataValidationError, match="already running"):
+            run_single_method(
+                CONFIG_PATH,
+                tmp_path / "missing-bundle",
+                phase_root,
+                phase="smoke",
+                split_id="S0",
+                seed=20260830,
+                method=method,
+                device_request="cpu",
+                resume=True,
+            )
