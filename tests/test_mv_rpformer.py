@@ -22,6 +22,8 @@ from hrrp_osr.models.mv_rpformer import (  # noqa: E402
 )
 from hrrp_osr.training.mv_rpformer import (  # noqa: E402
     IntentionalTrainingInterruption,
+    PseudoAuditAccumulator,
+    _assert_exact_method_directory_matrix,
     build_initialized_method_group,
     build_phase_plan,
     coherent_feature_mixup,
@@ -207,6 +209,31 @@ def test_pseudo_generation_rejects_non_train_roles(role: str) -> None:
     require_train_known_pseudo_source("train_known")
 
 
+def test_pseudo_audit_independently_enforces_composition_and_lambda_range() -> None:
+    valid = PseudoAuditAccumulator(method="M6_MV_RPFORMER_FULL", seed=1)
+    valid.real_count = 4
+    valid.mismatch_count = 2
+    valid.mixup_count = 2
+    valid.lambda_min = 0.3
+    valid.lambda_max = 0.7
+    assert valid.to_json()["status"] == "passed"
+
+    wrong_composition = PseudoAuditAccumulator(
+        method="M6_MV_RPFORMER_FULL", seed=1
+    )
+    wrong_composition.real_count = 4
+    wrong_composition.mismatch_count = 4
+    assert wrong_composition.to_json()["status"] == "failed"
+
+    wrong_lambda = PseudoAuditAccumulator(method="M6_MV_RPFORMER_FULL", seed=1)
+    wrong_lambda.real_count = 4
+    wrong_lambda.mismatch_count = 2
+    wrong_lambda.mixup_count = 2
+    wrong_lambda.lambda_min = 0.2
+    wrong_lambda.lambda_max = 0.8
+    assert wrong_lambda.to_json()["status"] == "failed"
+
+
 def test_rejector_uses_global_predicted_class_support() -> None:
     global_logits = torch.tensor([[0.0, 3.0, 1.0]])
     view_logits = torch.tensor([[[100.0, 20.0, 30.0], [101.0, 21.0, 31.0]]])
@@ -278,6 +305,18 @@ def test_confirmation_plan_is_config_only_and_full_matrix() -> None:
         for split_id in ("C0", "C1", "C2", "C3")
         for seed in (20260830, 20260831, 20260832)
     }
+
+
+def test_phase_directory_matrix_rejects_extra_method(tmp_path: Path) -> None:
+    config = load_mv_rpformer_config(CONFIG_PATH)
+    plan = build_phase_plan(config, "smoke")
+    seed_root = tmp_path / "S0" / "seed_20260830"
+    for method in METHODS:
+        (seed_root / method).mkdir(parents=True)
+    _assert_exact_method_directory_matrix(tmp_path, plan)
+    (seed_root / "EXTRA_METHOD").mkdir()
+    with pytest.raises(DataValidationError, match="extra method"):
+        _assert_exact_method_directory_matrix(tmp_path, plan)
 
 
 def test_confirmation_summary_rejects_incomplete_or_extra_units() -> None:

@@ -726,10 +726,30 @@ class PseudoAuditAccumulator:
 
     def to_json(self) -> dict[str, Any]:
         pseudo_count = self.mismatch_count + self.mixup_count
+        if self.method == "M5_MV_RPFORMER_MISMATCH":
+            composition_passed = (
+                self.mismatch_count == pseudo_count and self.mixup_count == 0
+            )
+            expected_composition = "100pct_mismatch"
+        elif self.method in {
+            "M6_MV_RPFORMER_FULL",
+            "M7_MV_CEFORMER_FULL",
+        }:
+            composition_passed = self.mismatch_count == self.mixup_count
+            expected_composition = "50pct_mismatch_50pct_mixup"
+        else:
+            composition_passed = pseudo_count == 0
+            expected_composition = "not_applicable"
+        lambda_range_passed = self.mixup_count == 0 or (
+            self.lambda_min >= 0.3 and self.lambda_max <= 0.7
+        )
         return {
             "status": (
                 "passed"
-                if self.same_class_violations == 0 and self.same_frame_violations == 0
+                if self.same_class_violations == 0
+                and self.same_frame_violations == 0
+                and composition_passed
+                and lambda_range_passed
                 else "failed"
             ),
             "method": self.method,
@@ -751,10 +771,13 @@ class PseudoAuditAccumulator:
             "mismatch_count": self.mismatch_count,
             "mixup_count": self.mixup_count,
             "real_pseudo_balanced": self.real_count == pseudo_count,
+            "expected_composition": expected_composition,
+            "composition_passed": composition_passed,
             "same_class_violations": self.same_class_violations,
             "mismatch_same_frame_violations": self.same_frame_violations,
             "mixup_lambda_min": None if self.mixup_count == 0 else self.lambda_min,
             "mixup_lambda_max": None if self.mixup_count == 0 else self.lambda_max,
+            "mixup_lambda_range_passed": lambda_range_passed,
             "anchor_class_counts": self.anchor_class_counts,
             "partner_class_counts": self.partner_class_counts,
             "mismatch_anchor_view1_frame_counts": self.mismatch_anchor_frame_counts,
@@ -1182,10 +1205,6 @@ def train_one_method(
             raise DataValidationError("resume checkpoint contract differs")
         model.load_state_dict(state["model_state_dict"], strict=True)
         optimizer.load_state_dict(state["optimizer_state_dict"])
-        for optimizer_state in optimizer.state.values():
-            for name, value in optimizer_state.items():
-                if isinstance(value, torch.Tensor):
-                    optimizer_state[name] = value.to(device)
         dataloader_generator.set_state(state["dataloader_generator_state"])
         pseudo_torch_generator.set_state(state["pseudo_torch_generator_state"])
         pseudo_numpy_generator.bit_generator.state = state["pseudo_numpy_generator_state"]
@@ -2023,6 +2042,10 @@ def audit_method_result(
     pair_sha = hashlib.sha256((destination / "pair_manifest.csv").read_bytes()).hexdigest()
     if pair_sha != contract.get("pair_manifest_sha256"):
         raise DataValidationError("method pair manifest hash differs")
+    with (destination / "pair_manifest.csv").open(
+        newline="", encoding="utf-8"
+    ) as handle:
+        pair_manifest_rows = list(csv.DictReader(handle))
     pair_audit = json.loads((destination / "pair_audit.json").read_text())
     if (
         pair_audit.get("status") != "passed"
@@ -2049,15 +2072,44 @@ def audit_method_result(
         raise DataValidationError("method permutation audit failed")
     pseudo = json.loads((destination / "pseudo_pair_audit.json").read_text())
     if method in REJECTOR_METHODS:
+        expected_real_count = sum(
+            row["experiment_role"] == "train_known" for row in pair_manifest_rows
+        ) * max(0, expected_epoch - int(config["training"]["representation_only_epochs"]))
+        replay = pseudo.get("replay_contract", {})
+        if method == "M5_MV_RPFORMER_MISMATCH":
+            composition_valid = (
+                pseudo.get("expected_composition") == "100pct_mismatch"
+                and pseudo.get("mismatch_count") == pseudo.get("pseudo_count")
+                and pseudo.get("mixup_count") == 0
+                and pseudo.get("mixup_lambda_min") is None
+                and pseudo.get("mixup_lambda_max") is None
+            )
+        else:
+            composition_valid = (
+                pseudo.get("expected_composition")
+                == "50pct_mismatch_50pct_mixup"
+                and pseudo.get("mismatch_count") == pseudo.get("mixup_count")
+                and float(pseudo.get("mixup_lambda_min", -1.0)) >= 0.3
+                and float(pseudo.get("mixup_lambda_max", 2.0)) <= 0.7
+            )
         if (
             pseudo.get("status") != "passed"
             or pseudo.get("real_pseudo_balanced") is not True
+            or pseudo.get("real_count") != expected_real_count
+            or pseudo.get("pseudo_count") != expected_real_count
+            or pseudo.get("composition_passed") is not True
+            or pseudo.get("mixup_lambda_range_passed") is not True
+            or not composition_valid
             or pseudo.get("same_class_violations") != 0
             or pseudo.get("mismatch_same_frame_violations") != 0
             or pseudo.get("source_role") != "train_known_only"
             or pseudo.get("surrogate_unknown_used") is not False
             or pseudo.get("final_unknown_used") is not False
             or pseudo.get("even_angle_test_used") is not False
+            or replay.get("torch_seed") != seed + 2
+            or replay.get("numpy_seed") != seed + 2
+            or replay.get("partner_sampling")
+            != "uniform_eligible_cross_class_v1"
         ):
             raise DataValidationError("method pseudo-unknown audit failed")
     elif pseudo.get("status") != "not_applicable":
@@ -2078,6 +2130,46 @@ def audit_method_result(
         for role in ("train", "known_calibration", "surrogate_unknown"):
             if f"{role}_global_logits" not in arrays or f"{role}_unknown_score" not in arrays:
                 raise DataValidationError("method saved arrays lack a required role")
+        for role in ("known_calibration", "surrogate_unknown"):
+            role_rows = [
+                row for row in prediction_rows if row["evaluation_role"] == role
+            ]
+            global_logits = arrays[f"{role}_global_logits"]
+            per_view_logits = arrays[f"{role}_per_view_logits"]
+            unknown_scores = arrays[f"{role}_unknown_score"]
+            labels = arrays[f"{role}_labels"]
+            csv_global = np.asarray(
+                [json.loads(row["global_logits"]) for row in role_rows],
+                dtype=np.float64,
+            )
+            csv_per_view = np.asarray(
+                [
+                    [json.loads(row["view1_logits"]), json.loads(row["view2_logits"])]
+                    for row in role_rows
+                ],
+                dtype=np.float64,
+            )
+            csv_scores = np.asarray(
+                [float(row["unknown_score"]) for row in role_rows], dtype=np.float64
+            )
+            csv_labels = np.asarray(
+                [int(row["true_label"]) for row in role_rows], dtype=np.int64
+            )
+            csv_predictions = np.asarray(
+                [int(row["predicted_known_label"]) for row in role_rows],
+                dtype=np.int64,
+            )
+            if (
+                global_logits.shape != csv_global.shape
+                or per_view_logits.shape != csv_per_view.shape
+                or unknown_scores.shape != csv_scores.shape
+                or not np.array_equal(labels, csv_labels)
+                or not np.array_equal(global_logits.argmax(axis=1), csv_predictions)
+                or not np.allclose(global_logits, csv_global, rtol=0.0, atol=1e-12)
+                or not np.allclose(per_view_logits, csv_per_view, rtol=0.0, atol=1e-12)
+                or not np.allclose(unknown_scores, csv_scores, rtol=0.0, atol=1e-12)
+            ):
+                raise DataValidationError("saved NPZ predictions differ from predictions.csv")
     return {
         "status": "passed",
         "phase": phase,
@@ -2092,6 +2184,7 @@ def audit_method_result(
         "initialization_audit": contract["initialization_audit"],
         "source_hashes": contract["task_source_hashes"],
         "execution_runtime": dict(execution_runtime),
+        "npz_predictions_crosschecked": True,
     }
 
 
@@ -2108,10 +2201,40 @@ def _phase_artifact_hashes(root: Path) -> dict[str, str]:
     }
 
 
+def _assert_exact_method_directory_matrix(
+    root: Path, plan: Sequence[Mapping[str, Any]]
+) -> None:
+    expected: dict[str, dict[str, set[str]]] = {}
+    for unit in plan:
+        split_id = str(unit["spec"]["split_id"])
+        seed_name = f"seed_{int(unit['seed'])}"
+        expected.setdefault(split_id, {})[seed_name] = set(unit["methods"])
+    actual_splits = {path.name for path in root.iterdir() if path.is_dir()}
+    if actual_splits != set(expected):
+        raise DataValidationError("phase root contains missing or extra split directories")
+    for split_id, expected_seeds in expected.items():
+        split_root = root / split_id
+        actual_seeds = {path.name for path in split_root.iterdir() if path.is_dir()}
+        if actual_seeds != set(expected_seeds):
+            raise DataValidationError(
+                f"{split_id} contains missing or extra seed directories"
+            )
+        for seed_name, expected_methods in expected_seeds.items():
+            seed_root = split_root / seed_name
+            actual_methods = {
+                path.name for path in seed_root.iterdir() if path.is_dir()
+            }
+            if actual_methods != expected_methods:
+                raise DataValidationError(
+                    f"{split_id}/{seed_name} contains missing or extra method directories"
+                )
+
+
 def _collect_phase_audit(
     config: Mapping[str, Any], root: Path, *, phase: str
 ) -> dict[str, Any]:
     plan = build_phase_plan(config, phase)
+    _assert_exact_method_directory_matrix(root, plan)
     require_formal = phase != "smoke"
     audited: list[dict[str, Any]] = []
     for unit in plan:
@@ -2199,6 +2322,9 @@ def _collect_phase_audit(
         "final_unknown_used": False,
         "even_angle_test_used": False,
         "predictions_exactly_recomputed": True,
+        "npz_predictions_crosschecked": all(
+            row["npz_predictions_crosschecked"] for row in audited
+        ),
         "all_method_hashes_verified": True,
         "all_permutation_audits_passed": True,
         "all_pseudo_audits_passed": True,
