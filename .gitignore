@@ -42,6 +42,7 @@ artifacts/results/
 artifacts/logs/
 artifacts/diagnostic/
 artifacts/amdr/
+artifacts/arpl/mv_rpformer_surrogate_v1/
 checkpoints/
 outputs/
 runs/
