@@ -85,11 +85,15 @@ COMPARISONS = {
 }
 TASK_SOURCE_FILES = (
     "configs/experiments/arpl/mv_rpformer_surrogate_v1.yaml",
+    "src/hrrp_osr/amdr/data.py",
+    "src/hrrp_osr/data/manifest.py",
+    "src/hrrp_osr/data/processed.py",
     "src/hrrp_osr/models/arpl.py",
     "src/hrrp_osr/models/cnn1d.py",
     "src/hrrp_osr/models/hrrp_ms_resnet.py",
     "src/hrrp_osr/models/mv_rpformer.py",
     "src/hrrp_osr/training/arpl_pilot.py",
+    "src/hrrp_osr/training/arpl_mv_evidence.py",
     "src/hrrp_osr/training/mv_rpformer.py",
     "src/hrrp_osr/evaluation/metrics.py",
 )
@@ -1138,6 +1142,9 @@ def train_one_method(
     runtime_contract = {
         "device": str(device),
         "device_type": device.type,
+        "device_name": (
+            torch.cuda.get_device_name(device) if device.type == "cuda" else None
+        ),
         "torch_version": torch.__version__,
         "numpy_version": np.__version__,
         "cuda_version": torch.version.cuda,
@@ -1641,6 +1648,7 @@ def save_method_result(
         "pair_manifest_sha256": prepared.pair_manifest_sha256,
         "initialization_seed": seed,
         "config_sha256": config["_config_sha256"],
+        "execution_runtime": trained["runtime_contract"],
     }
     torch.save(checkpoint, destination / "checkpoint.pt")
     resolved = dict(config)
@@ -1861,6 +1869,7 @@ def _run_single_method_unlocked(
         "surrogate_class_order": list(prepared.surrogate_class_order),
         "task_source_hashes": source_hashes,
         "runtime": runtime,
+        "execution_runtime": trained["runtime_contract"],
         "initialization_audit": initialization,
         "final_unknown_used": False,
         "even_angle_test_used": False,
@@ -2001,6 +2010,16 @@ def audit_method_result(
     project_root = Path(config["_config_path"]).parents[3]
     if contract.get("task_source_hashes") != task_source_hashes(project_root):
         raise DataValidationError("method source hashes differ from current frozen code")
+    execution_runtime = contract.get("execution_runtime")
+    if not isinstance(execution_runtime, Mapping) or (
+        execution_runtime.get("device_type") not in {"cpu", "cuda", "mps"}
+        or int(execution_runtime.get("torch_intraop_threads", -1))
+        != int(config["runtime"]["torch_intraop_threads"])
+        or int(execution_runtime.get("torch_interop_threads", -1))
+        != int(config["runtime"]["torch_interop_threads"])
+        or execution_runtime.get("deterministic_algorithms") is not True
+    ):
+        raise DataValidationError("method execution runtime contract failed")
     pair_sha = hashlib.sha256((destination / "pair_manifest.csv").read_bytes()).hexdigest()
     if pair_sha != contract.get("pair_manifest_sha256"):
         raise DataValidationError("method pair manifest hash differs")
@@ -2022,6 +2041,7 @@ def audit_method_result(
         or int(checkpoint.get("checkpoint_epoch", -1)) != expected_epoch
         or bool(checkpoint.get("formal_checkpoint")) != require_formal
         or checkpoint.get("checkpoint_selection") != "fixed_final_epoch"
+        or checkpoint.get("execution_runtime") != execution_runtime
     ):
         raise DataValidationError("method checkpoint contract failed")
     permutation = json.loads((destination / "permutation_audit.json").read_text())
@@ -2071,6 +2091,7 @@ def audit_method_result(
         "pseudo_schedule_sha256": pseudo.get("schedule_sha256"),
         "initialization_audit": contract["initialization_audit"],
         "source_hashes": contract["task_source_hashes"],
+        "execution_runtime": dict(execution_runtime),
     }
 
 
@@ -2115,6 +2136,10 @@ def _collect_phase_audit(
     observed_units = {(row["split_id"], row["seed"]) for row in audited}
     if observed_units != expected_units or len(audited) != len(plan) * len(METHODS):
         raise DataValidationError("phase artifact matrix is not the frozen Cartesian product")
+    if len(
+        {json.dumps(row["execution_runtime"], sort_keys=True) for row in audited}
+    ) != 1:
+        raise DataValidationError("phase methods used different execution runtimes")
     fairness_rows = []
     for split_id, seed in sorted(expected_units):
         rows = [
@@ -2131,6 +2156,13 @@ def _collect_phase_audit(
             raise DataValidationError("method initialization audit contracts differ")
         if len({json.dumps(row["source_hashes"], sort_keys=True) for row in rows}) != 1:
             raise DataValidationError("method source hash contracts differ")
+        if len(
+            {
+                json.dumps(row["execution_runtime"], sort_keys=True)
+                for row in rows
+            }
+        ) != 1:
+            raise DataValidationError("methods used different execution runtimes")
         pseudo = {row["method"]: row["pseudo_schedule_sha256"] for row in rows}
         if pseudo["M6_MV_RPFORMER_FULL"] != pseudo["M7_MV_CEFORMER_FULL"]:
             raise DataValidationError("M6 and M7 pseudo schedules differ")
@@ -2141,6 +2173,7 @@ def _collect_phase_audit(
                 "pair_manifest_sha256": rows[0]["pair_manifest_sha256"],
                 "same_real_pair_manifest_and_prediction_order": True,
                 "same_initialization_audit": True,
+                "same_execution_runtime": True,
                 "m6_m7_same_pseudo_schedule": True,
             }
         )
@@ -2162,6 +2195,7 @@ def _collect_phase_audit(
         "metric_rows": metric_rows,
         "fairness_rows": fairness_rows,
         "source_hashes": audited[0]["source_hashes"],
+        "execution_runtime": audited[0]["execution_runtime"],
         "final_unknown_used": False,
         "even_angle_test_used": False,
         "predictions_exactly_recomputed": True,
