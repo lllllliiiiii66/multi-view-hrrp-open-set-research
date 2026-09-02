@@ -1,0 +1,177 @@
+schema_version: 1
+stage: P1_surrogate_mv_evidence
+experiment_id: arpl_mv_evidence_surrogate_v1
+result_scope: development_then_conditional_confirmation_known_source_only
+
+evidence_scope:
+  source_known_odd_angle_only: true
+  final_unknown_classes_used: false
+  even_angle_test_used: false
+  amdr_used: false
+  confusing_samples_used: false
+  other_open_set_methods_used: false
+
+official_reference:
+  repository: https://github.com/gary23ai/ARPL
+  commit: 3ede8b38e1cfb9d70e106cc19d563453110c36ab
+  dist_sha256: a05fc01c9051d8cb8d87cc7183e0a3d9fd1a11ca9de38d58a4870cb70ad4dc62
+  arploss_sha256: 6dec41f0265b6665e8c66a27f506f176a0a7b0b2e4426760c09c203ab0c327ec
+
+prior_baseline:
+  code_commit: 4693061bbeae3dc8f2ef856ecfeb18ac9f1ea6ca
+  artifact_root: artifacts/arpl/arpl_lite_surrogate_osr_v1/full_surrogate_20260902_4693061
+  root_hash_manifest_sha256: 6c7824243bd66c524a0cac1fcea68783c161e501f810f63c122e31c47de9427a
+  config_sha256: 8ca71a1abad7aadcc6e640aa6e2d5c1941182ecee073937086b5c2c9ece0b805
+  development_pair_manifest_sha256:
+    S0: 44c4c9ce8963cd95c4eea20f4908b168c12441a6fecc6c99afded91815b4a710
+    S1: 26aa9c13cb4b73438350c83198809977eb7e7b2b49e4782f04d04d37ffb9d44e
+    S2: 9475706265fe147f84d61265b9acd71b9a2ca716dcc42706f33dcf297135d7bd
+
+bundle:
+  dataset_id: hrrp_10class_theta83_hh_v1
+  preprocessing_id: hrrp_padding_complex_gaussian_v1
+  profiles_sha256: 2dd92282c125f0f677cf1f2dfce828781c8ba4385cf9ae552c4a2c56033c3f5b
+  manifest_sha256: 748b9f30629c3b3cbe66c6a1dac30863fdab2d81a214e46d8bc3ef7c6022a08a
+  bundle_sha256: 79176091b5b745e5df5957f1bb4ade7304c1403a4a32e64622e012db67d5a0c5
+
+classes:
+  source_known_order:
+    - CVN77
+    - DDG-1000
+    - DDG-112
+    - 油气轮MARVEL CRANE
+    - 爱达魔都号
+    - 迷你好望角型散货船
+    - 集装箱船达飞罗尔多夫级
+  final_unknown_count: 3
+  development_splits:
+    - split_id: S0
+      angle_fold: 1
+      train_known_indices: [2, 3, 4, 5, 6]
+      surrogate_unknown_indices: [0, 1]
+    - split_id: S1
+      angle_fold: 2
+      train_known_indices: [0, 1, 4, 5, 6]
+      surrogate_unknown_indices: [2, 3]
+    - split_id: S2
+      angle_fold: 3
+      train_known_indices: [0, 1, 2, 3, 6]
+      surrogate_unknown_indices: [4, 5]
+  confirmation_splits:
+    - split_id: C0
+      angle_fold: 0
+      train_known_indices: [1, 2, 3, 4, 5]
+      surrogate_unknown_indices: [0, 6]
+    - split_id: C1
+      angle_fold: 4
+      train_known_indices: [0, 2, 3, 4, 6]
+      surrogate_unknown_indices: [1, 5]
+    - split_id: C2
+      angle_fold: 0
+      train_known_indices: [0, 1, 3, 5, 6]
+      surrogate_unknown_indices: [2, 4]
+    - split_id: C3
+      angle_fold: 4
+      train_known_indices: [0, 1, 2, 4, 5]
+      surrogate_unknown_indices: [3, 6]
+
+sampling:
+  fold_count: 5
+  frame_width_deg: 15
+  development_angle_parity: odd
+  base_seed: 20260830
+  slot_order: randomized_seeded
+  distinct_frames: true
+  pairs_per_class:
+    smoke: 50
+    full: 500
+  final_test_pairs_generated: false
+
+normalization:
+  method: global_scalar_zscore
+  fit_population: unique_train_known_base_samples_only
+  epsilon: 1.0e-8
+
+model:
+  input_shape: [2, 601]
+  encoder: shared_hrrp_encoder_1d_v1
+  feature_dim: 128
+  pooling: mean
+  view_specific_encoder: false
+  position_encoding: false
+  permutation_invariant: true
+  methods: [CE_MLS, CE_VIEW_AUX, ARPL_LITE, ARPL_VIEW_AUX]
+  lambda_view: 0.5
+  arpl:
+    num_centers_per_class: 1
+    reciprocal_init_std: 0.1
+    initial_radius: 0.0
+    temperature: 1.0
+    weight_pl: 0.1
+    margin: 1.0
+    margin_scope: fused_only
+
+training:
+  development_seeds: [20260830]
+  confirmation_seeds: [20260830, 20260831, 20260832]
+  dataloader_seed_offset: 1
+  max_epochs:
+    smoke: 3
+    full: 100
+  batch_size: 64
+  optimizer: AdamW
+  learning_rate: 1.0e-3
+  weight_decay: 1.0e-4
+  scheduler: none
+  early_stopping_patience: 15
+  selection_primary: known_calibration_accuracy
+  selection_secondary: known_calibration_macro_f1
+  data_augmentation: none
+  deterministic_algorithms: true
+  num_workers: 0
+  numerical_fallback:
+    trigger: nan_inf_or_optimizer_numerical_error_only
+    learning_rate: 3.0e-4
+    rerun_all_four_methods: true
+
+evidence:
+  ecdf_fit: known_calibration_only
+  per_view_ecdf_pooling: symmetric_both_views_combined
+  unknown_score_direction: larger_is_more_unknown
+  rules:
+    F0_FUSED: q_f
+    F1_WORST_VIEW: max_q1_q2
+    F2_EVIDENCE_UNION: max_qf_q1_q2
+    F3_DISAGREEMENT_AWARE: max_qf_q1_q2_qjs
+  diagnostic_rule: mean_q1_q2
+  threshold_known_acceptance_rate: 0.95
+
+development_selection:
+  eligible_methods: [CE_VIEW_AUX, ARPL_VIEW_AUX]
+  candidate_rules: [F1_WORST_VIEW, F2_EVIDENCE_UNION, F3_DISAGREEMENT_AWARE]
+  unit_count: 6
+  minimum_positive_auroc_units: 4
+  minimum_mean_auroc_delta: 0.02
+  minimum_mean_oscr_delta: 0.0
+  tie_breakers: [mean_auroc_delta, mean_oscr_delta, fewer_components]
+  stop_if_none_eligible: true
+
+confirmation_decision:
+  unit_count_per_head: 12
+  minimum_mean_auroc_delta: 0.02
+  minimum_positive_auroc_units: 8
+  minimum_mean_oscr_delta: 0.0
+  maximum_mean_known_accuracy_drop: 0.005
+  maximum_mean_fpr95_increase: 0.02
+  labels: [common_success, arpl_specific_success, ce_specific_success, no_stable_gain]
+
+outputs:
+  namespace: artifacts/arpl/arpl_mv_evidence_surrogate_v1
+  fail_if_output_nonempty: true
+  save_checkpoints: true
+  save_features_logits_scores: true
+  save_predictions: true
+  save_ecdf_parameters: true
+  save_training_logs: true
+  save_pair_manifests: true
+  save_artifact_hashes: true

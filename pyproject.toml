@@ -22,6 +22,7 @@ hrrp-p0 = "hrrp_osr.cli:main"
 hrrp-amdr-smoke = "hrrp_osr.amdr.smoke:main"
 hrrp-amdr-p0-closure = "hrrp_osr.amdr.closure:main"
 hrrp-arpl-pilot = "hrrp_osr.training.arpl_pilot:main"
+hrrp-arpl-mv-evidence = "hrrp_osr.training.arpl_mv_evidence:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

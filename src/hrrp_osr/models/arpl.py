@@ -17,6 +17,14 @@ class TwoViewModelOutput:
 
 
 @dataclass(frozen=True)
+class TwoViewDetailedOutput:
+    per_view_features: torch.Tensor
+    fused_features: torch.Tensor
+    per_view_logits: torch.Tensor
+    fused_logits: torch.Tensor
+
+
+@dataclass(frozen=True)
 class ARPLLossOutput:
     logits: torch.Tensor
     total_loss: torch.Tensor
@@ -92,6 +100,16 @@ class TwoViewCEClassifier(nn.Module):
     def forward_representation(self, inputs: torch.Tensor) -> TwoViewModelOutput:
         per_view, fused = self.backbone(inputs)
         return TwoViewModelOutput(per_view, fused, self.classifier(fused))
+
+    def forward_all_views(self, inputs: torch.Tensor) -> TwoViewDetailedOutput:
+        per_view, fused = self.backbone(inputs)
+        per_view_logits = self.classifier(per_view)
+        return TwoViewDetailedOutput(
+            per_view_features=per_view,
+            fused_features=fused,
+            per_view_logits=per_view_logits,
+            fused_logits=self.classifier(fused),
+        )
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         return self.forward_representation(inputs).logits
@@ -190,6 +208,19 @@ class TwoViewARPLClassifier(nn.Module):
         per_view, fused = self.backbone(inputs)
         return TwoViewModelOutput(per_view, fused, self.head.logits(fused))
 
+    def forward_all_views(self, inputs: torch.Tensor) -> TwoViewDetailedOutput:
+        per_view, fused = self.backbone(inputs)
+        shape = per_view.shape
+        per_view_logits = self.head.logits(per_view.reshape(-1, shape[-1])).reshape(
+            shape[0], shape[1], self.known_class_count
+        )
+        return TwoViewDetailedOutput(
+            per_view_features=per_view,
+            fused_features=fused,
+            per_view_logits=per_view_logits,
+            fused_logits=self.head.logits(fused),
+        )
+
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         return self.forward_representation(inputs).logits
 
@@ -201,4 +232,3 @@ class TwoViewARPLClassifier(nn.Module):
     @property
     def parameter_count(self) -> int:
         return sum(parameter.numel() for parameter in self.parameters())
-
