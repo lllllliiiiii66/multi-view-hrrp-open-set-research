@@ -1,0 +1,269 @@
+schema_version: 1
+stage: P3_surrogate_ms_mean_head_factorial
+experiment_id: ms_mean_head_factorial_surrogate_v1
+result_scope: diagnostic_smoke_then_mandatory_confirmation_known_source_only
+
+evidence_scope:
+  source_known_odd_angle_only: true
+  final_unknown_classes_used: false
+  even_angle_test_used: false
+  surrogate_unknown_used_for_training: false
+  surrogate_unknown_used_for_normalization: false
+  surrogate_unknown_used_for_threshold: false
+  surrogate_unknown_used_for_checkpoint_selection: false
+  angle_or_view_metadata_used_by_model: false
+
+prior_experiment:
+  source_commit: ccb30e18b4aa9e78e136ba330dddefb11aab11ae
+  source_experiment_id: mv_rpformer_surrogate_v1
+  stopped_methods:
+    - M3_MS_SET_GLOBAL_ARPL
+    - M4_MS_SET_HIER_ARPL
+    - M5_MV_RPFORMER_MISMATCH
+    - M6_MV_RPFORMER_FULL
+  prohibited_surrogate_pairs:
+    - [0, 1]
+    - [2, 3]
+    - [4, 5]
+    - [0, 6]
+    - [1, 5]
+    - [2, 4]
+    - [3, 6]
+
+official_reference:
+  repository: https://github.com/gary23ai/ARPL
+  commit: 3ede8b38e1cfb9d70e106cc19d563453110c36ab
+  dist_sha256: a05fc01c9051d8cb8d87cc7183e0a3d9fd1a11ca9de38d58a4870cb70ad4dc62
+  arploss_sha256: 6dec41f0265b6665e8c66a27f506f176a0a7b0b2e4426760c09c203ab0c327ec
+
+bundle:
+  dataset_id: hrrp_10class_theta83_hh_v1
+  preprocessing_id: hrrp_padding_complex_gaussian_v1
+  profiles_sha256: 2dd92282c125f0f677cf1f2dfce828781c8ba4385cf9ae552c4a2c56033c3f5b
+  manifest_sha256: 748b9f30629c3b3cbe66c6a1dac30863fdab2d81a214e46d8bc3ef7c6022a08a
+  bundle_sha256: 79176091b5b745e5df5957f1bb4ade7304c1403a4a32e64622e012db67d5a0c5
+
+classes:
+  source_known_order:
+    - CVN77
+    - DDG-1000
+    - DDG-112
+    - 油气轮MARVEL CRANE
+    - 爱达魔都号
+    - 迷你好望角型散货船
+    - 集装箱船达飞罗尔多夫级
+  final_unknown_count: 3
+  identity_pairs:
+    - pair_id: N0
+      surrogate_unknown_indices: [0, 2]
+      train_known_indices: [1, 3, 4, 5, 6]
+    - pair_id: N1
+      surrogate_unknown_indices: [2, 5]
+      train_known_indices: [0, 1, 3, 4, 6]
+    - pair_id: N2
+      surrogate_unknown_indices: [3, 5]
+      train_known_indices: [0, 1, 2, 4, 6]
+    - pair_id: N3
+      surrogate_unknown_indices: [1, 3]
+      train_known_indices: [0, 2, 4, 5, 6]
+    - pair_id: N4
+      surrogate_unknown_indices: [1, 6]
+      train_known_indices: [0, 2, 3, 4, 5]
+    - pair_id: N5
+      surrogate_unknown_indices: [4, 6]
+      train_known_indices: [0, 1, 2, 3, 5]
+    - pair_id: N6
+      surrogate_unknown_indices: [0, 4]
+      train_known_indices: [1, 2, 3, 5, 6]
+  angle_folds: [0, 4]
+
+sampling:
+  pair_protocol_source: arpl_lite_surrogate_osr_v1
+  pair_protocol_scope: experiment_angle_fold_shared_across_identity_pairs
+  identity_pair_only_filters_class_roles: true
+  fold_count: 5
+  frame_width_deg: 15
+  development_angle_parity: odd
+  base_seed: 20260830
+  slot_order: randomized_seeded
+  distinct_frames: true
+  pairs_per_class:
+    smoke: 10
+    full: 500
+  final_test_pairs_generated: false
+
+normalization:
+  method: global_scalar_zscore
+  fit_population: unique_train_known_base_samples_only
+  epsilon: 1.0e-8
+
+model:
+  input_shape: [2, 601]
+  feature_dim: 128
+  fusion: arithmetic_mean
+  methods:
+    - R0_SHALLOW_MEAN_CE
+    - R1_SHALLOW_MEAN_ARPL
+    - R2_MS_MEAN_CE
+    - R3_MS_MEAN_ARPL
+  shallow_encoder:
+    architecture: shared_hrrp_encoder_1d_v1
+    shared_between_views: true
+  multiscale_encoder:
+    architecture: hrrp_ms_resnet_v1
+    shared_between_views: true
+    input_length: 601
+    stem_channels: 32
+    stem_kernel_size: 31
+    stage_channels: [32, 64, 128]
+    branch_kernel_sizes: [3, 7, 15]
+    branch_convolution: standard_conv1d
+    activation: GELU
+    dropout: 0.1
+    pooling: [global_average, global_max]
+    projection_dim: 128
+  ce:
+    head: linear
+    weight_init_std: 0.01
+    bias_init: 0.0
+  arpl:
+    algorithm_id: arpl_official_loss_one_center_device_safe_v1
+    num_centers_per_class: 1
+    reciprocal_init_std: 0.1
+    initial_radius: 0.0
+    temperature: 1.0
+    weight_pl: 0.1
+    margin: 1.0
+  forbidden_components:
+    - SAB
+    - PMA
+    - attention
+    - view_level_head
+    - reject_token
+    - learned_rejector
+    - pseudo_unknown
+    - confusing_samples
+    - GAN
+
+training:
+  methods:
+    - R0_SHALLOW_MEAN_CE
+    - R1_SHALLOW_MEAN_ARPL
+    - R2_MS_MEAN_CE
+    - R3_MS_MEAN_ARPL
+  confirmation_seeds: [20260830, 20260831, 20260832]
+  optimizer: AdamW
+  learning_rate: 3.0e-4
+  weight_decay: 1.0e-4
+  batch_size: 64
+  total_epochs: 100
+  smoke_epochs: 1
+  scheduler: warmup_cosine
+  warmup_epochs: 5
+  formal_checkpoint_epoch: 100
+  early_stopping: false
+  calibration_checkpoint_selection: false
+  performance_fallback: false
+  data_augmentation: none
+  dataloader_seed_offset: 1
+  deterministic_algorithms: true
+  num_workers: 0
+
+evaluation:
+  unknown_score: negative_maximum_global_raw_logit
+  unknown_score_direction: larger_is_more_unknown
+  threshold_source: known_calibration_only
+  threshold_known_acceptance_rate: 0.95
+  report_metrics:
+    - known_accuracy
+    - known_macro_f1
+    - auroc
+    - oscr
+    - fpr95
+    - known_correct_acceptance_rate
+    - unknown_rejection_rate
+    - open_set_harmonic_score
+    - k_plus_1_macro_f1
+  aliases:
+    known_correct_acceptance_rate: KCCR
+    unknown_rejection_rate: URR
+    open_set_harmonic_score: KCCR_URR_harmonic_mean
+  report_surrogate_absorption_by_known_class: true
+
+length_padding_audit:
+  diagnostic_only: true
+  used_for_gate: false
+  delete_or_replace_pair: false
+  length_safe_definition: both_folds_all_surrogate_original_lengths_within_inclusive_train_known_range
+  length_risk_definition: at_least_one_fold_has_surrogate_original_length_outside_inclusive_train_known_range
+  report_length_only_auroc: true
+  report_all_safe_and_risk_subsets: true
+
+comparisons:
+  backbone_arpl: [R3_MS_MEAN_ARPL, R1_SHALLOW_MEAN_ARPL]
+  backbone_ce: [R2_MS_MEAN_CE, R0_SHALLOW_MEAN_CE]
+  head_multiscale: [R3_MS_MEAN_ARPL, R2_MS_MEAN_CE]
+  head_shallow: [R1_SHALLOW_MEAN_ARPL, R0_SHALLOW_MEAN_CE]
+  interaction: (R3-R2)-(R1-R0)
+  primary_statistical_unit: identity_pair
+  unit_aggregation_order: mean_over_2_folds_x_3_seeds_then_aggregate_7_pairs
+
+decision:
+  backbone_gate:
+    minimum_mean_auroc_delta: 0.03
+    minimum_positive_pair_count: 6
+    minimum_mean_oscr_delta: 0.0
+    maximum_mean_known_accuracy_drop: 0.005
+    maximum_mean_fpr95_increase: 0.02
+  head_gate:
+    minimum_mean_auroc_delta: 0.01
+    minimum_positive_pair_count: 5
+    minimum_mean_oscr_delta: 0.0
+    maximum_mean_known_accuracy_drop: 0.005
+    maximum_mean_fpr95_increase: 0.02
+  labels:
+    backbone:
+      - backbone_general_success
+      - backbone_arpl_only
+      - backbone_ce_only
+      - no_backbone_gain
+    head:
+      - ARPL_PREFERRED
+      - CE_PREFERRED
+      - HEAD_INDETERMINATE
+  final_unknown_test_authorized: false
+
+uncertainty:
+  bootstrap_statistical_unit: identity_pair
+  bootstrap_resamples: 10000
+  bootstrap_seed: 20260903
+  confidence_level: 0.95
+  interval: percentile
+  combination_pairs_are_not_independent_repeats: true
+
+runtime:
+  formal_device: cuda
+  expected_gpu_model: NVIDIA GeForce RTX 4090
+  expected_gpu_count: 4
+  jobs_per_gpu: 4
+  total_parallel_jobs: 16
+  gpu_assignment: rotating_method_balanced_v1
+  torch_intraop_threads: 4
+  torch_interop_threads: 1
+  cublas_workspace_config: :4096:8
+  amp: false
+  tf32: false
+  torch_compile: false
+
+outputs:
+  namespace: artifacts/arpl/ms_mean_head_factorial_surrogate_v1
+  fail_if_output_nonempty: true
+  save_resolved_config: true
+  save_pair_manifest_and_hash: true
+  save_initial_backbone_state_hash: true
+  save_epoch_100_checkpoint: true
+  save_features_logits_scores: true
+  save_predictions: true
+  save_length_padding_audit: true
+  save_training_logs: true
+  save_environment_and_hashes: true
