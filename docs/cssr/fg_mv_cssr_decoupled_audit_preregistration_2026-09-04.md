@@ -91,6 +91,15 @@ checkpoint_selection = fixed_final_epoch
 L = L_cls + 0.5 * L_rel
 ```
 
+旧 v2 源配置 SHA-256 固定为 `5c227c00a7ac5a88c9bf5d66618964bc05c67f45c51c2a880731f6753626512e`。阶段 A 启动时必须同时核对：N1/N4 R2 checkpoint SHA-256 分别为 `a4f6fa3235fbb5cf74b712588a0318f614a05287adec4ee881820424cddbcbaa` / `169387ad7a87463110ac7a2cd45afd7dac49428538c93c84975162e425d94ff5`；N1/N4 epoch-0 R2 common-state hash 分别为 `3a7e74e89d11812877409d415c505c087a913e3b08098ab1fa583fa1151aeb07` / `67825e2bc143b32ed52beb5778e1190bc809269dfaedfb516a692eac64fa31f2`；Q2 AE 初始 hash 为 `4c3257678eaca1bd20ea2e97b09aeaf87fdd23c71ff65dcc1696dfe61963d6fb`。
+
+前 5 轮 schedule hash 也必须逐轮等于旧产物：
+
+| Pair | Epoch 1–5 schedule SHA-256 |
+|---|---|
+| N1 | `c2583a5ef3bea986a97fb14aac738e03a16ffc0f794a13ccc3951aaad4468922`；`3e89d9a8cc76685d8dead18614818cf5480b0f308c348e744e773b9e17d8f498`；`0e591a578934bbaaebf42437870b328a92923f5799975a43e1943272e9601b39`；`85a8bd03d420797559afba991931f83dbd3189ccc17d59f54fe6644729c0fcd6`；`b07a1347d955ca466736e570b370fcf719c16f2ed1aff404cd2f7871e53f53fe` |
+| N4 | `c6090d55d3500feb6e578d29c5738e8696ddd87eb68d01207a8dc3f0d1acd6f1`；`9321d11bbc7d15ea3965d9fb3dfc84181f48877a972955696b8b1f35fa2ef582`；`82244ed649e5f4c4cb192feb1a227118889521729431945e968767f6465fac10`；`ec11524bcf16eb0001878de2a2d5cb82c6c11d9f95c7b636bb3973feb96f50f1`；`85673d1df05cc1190aadafcfc93d1782363288467ec27c28f7110f54dc06951a` |
+
 `N1-Q2` 与 `N4-Q2` 都从各自原 R2 epoch-100 checkpoint 和 seed `20260904` 的 Q2 初始状态重新开始，不从旧训练中途恢复。旧 N4-Q2 在异常前没有成功 checkpoint，因此“精确复现旧 N4-Q2”只指相同 R2、Q2 初始状态、配置、数据和 epoch-wise schedule；不得声称恢复了不存在的 Q2 checkpoint。
 
 audit-only 模式只关闭“连续 3 个 epoch 的 mean-of-batch-ratios 超过 100 后抛异常”，仍保存 `would_have_triggered_original_100x_gate` 和首次触发 epoch。NaN/Inf、optimizer error、参数非有限、源哈希变化、数据或 schedule 不一致仍立即失败。固定只运行 5 epoch；如果 5 轮内未触发，记录 `not_triggered_within_5_epochs=true`，不得增加 epoch。
@@ -133,7 +142,7 @@ C = sqrt(mean(||g_rel_weighted||^2)) /
     max(sqrt(mean(||g_cls||^2)), 1e-12)
 ```
 
-另保存 ratio 的 min/median/p90/p95/max；cosine 的 mean/median/positive fraction/negative fraction/undefined fraction；CE gradient `<1e-4/<1e-5/<1e-6/<1e-7/<1e-8` 的 batch fraction；clipping fraction；四个参数组的 epoch 前后相对更新
+另保存 ratio 的 min/median/p90/p95/max；p90/p95 固定使用 NumPy `quantile(method="linear")`；cosine 的 mean/median/positive fraction/negative fraction/undefined fraction；CE gradient `<1e-4/<1e-5/<1e-6/<1e-7/<1e-8` 的 batch fraction；clipping fraction；四个参数组的 epoch 前后相对更新
 
 ```text
 ||theta_after-theta_before|| / max(||theta_before||, 1e-12)
@@ -186,7 +195,7 @@ CSSR 不改变 `h_v/g/logits_fused/y_hat`，也不改变 D0 的类别条件 MLS�
 
 ```text
 delta = Conv1d(128,64,kernel_size=3,padding=1,bias=False)
-        -> GroupNorm(8,64)
+        -> GroupNorm(8,64,eps=1e-5,affine=True)
         -> GELU
         -> Conv1d(64,128,kernel_size=1,bias=False)
 U = Z + 0.1 * delta
@@ -231,13 +240,19 @@ L = L_rel + 0.25 * L_abs + 0.5 * L_sep
 
 阶段 B 不构造训练 pair。每个单元从 train-known 提取按 `(model_label,sample_id)` 排序的 720 个唯一底层样本，每类 144 条；每个 sample_id 每 epoch 恰好出现一次。pair multiplicity 不增加训练权重。
 
-每 epoch 使用
+每 epoch 先按类别分别使用
 
 ```text
-fg_mv_cssr_decoupled_single_view_order_v1|cssr_seed|pair_id|fold|epoch
+fg_mv_cssr_decoupled_single_view_class_v1|cssr_seed|pair_id|fold|epoch|model_label
 ```
 
-的 SHA-256 前 8 字节按大端无符号整数初始化 `numpy.random.Generator(PCG64)`，对 720 条排序样本做一次全局 permutation；DataLoader 不再 shuffle。D1/D2 在同一 pair 上共享 20 个 epoch 的顺序与哈希。保存每 epoch manifest、sample usage、class count 和完整 schedule hash。
+的 SHA-256 前 8 字节按大端无符号整数初始化 `numpy.random.Generator(PCG64)`，对各类 144 条排序样本独立 permutation。再用
+
+```text
+fg_mv_cssr_decoupled_single_view_class_order_v1|cssr_seed|pair_id|fold|epoch
+```
+
+派生一次五类轮询起始顺序，并按该顺序循环交织五类的第 1、2、…、144 条样本。这样完整 epoch 五类各 144 条，任意完整 batch 的类别数最多相差 1；DataLoader 不再 shuffle。D1/D2 在同一 pair 上共享 20 个 epoch 的顺序与哈希。保存每 epoch manifest、sample usage、class count、class seed、class-order seed 和完整 schedule hash。
 
 known calibration、surrogate unknown、最终 unknown 与偶数角 test 均不进入训练。
 
@@ -269,7 +284,7 @@ epoch 1–5 adapter `requires_grad=False` 且实际 lr 为 0，只训练类别 A
 
 每 epoch 保存 `L_rel/L_abs/L_sep`、adapter/AE/total gradient norm、clipping fraction、adapter/AE 参数相对更新、CSSR train/known-calibration classification Accuracy、true-class `r`、nearest-wrong `r` 和 reconstruction margin。
 
-对完整 720 条 train-known 的 `U` 保存：每样本 Frobenius norm 均值；在 sample×position 维度上的逐通道方差 min/mean/max；中心化矩阵 `[720*76,128]` 的奇异值能量摘要。effective rank 固定为
+每个 epoch 完成后，用按 `(model_label,sample_id)` 排序的完整 720 条 train-known 作为固定诊断人口计算 `U`；不使用当轮训练 permutation。保存：每样本 Frobenius norm 均值；在 sample×position 维度上的逐通道方差 min/mean/max；中心化矩阵 `[720*76,128]` 的奇异值能量摘要。effective rank 固定为
 
 ```text
 p_i = s_i^2 / sum_j s_j^2
@@ -278,7 +293,7 @@ effective_rank = exp(-sum_i p_i * log(p_i + 1e-12))
 
 并保存前 10 个能量占比。若完整集合 `max(channel_variance)<=1e-12`，判定 `U` 完全坍缩并硬失败。
 
-本阶段不使用“辅助梯度/CE 梯度 100 倍”门槛。硬失败仅限：NaN/Inf、optimizer error、参数非有限、上述完全常数坍缩、checkpoint 无法严格重放、数据泄漏、manifest/schedule/源码哈希不一致。不得因性能差提前停止。
+本阶段不使用“辅助梯度/CE 梯度 100 倍”门槛。硬失败仅限：NaN/Inf、optimizer error、参数非有限、上述完全常数坍缩、checkpoint 无法严格重放、数据泄漏、manifest/schedule/源码哈希不一致。checkpoint 回放在同一已冻结 CUDA 数值环境中要求逐数组 bitwise exact。不得因性能差提前停止。
 
 ## 9. 冻结后推理与分数
 
@@ -302,7 +317,7 @@ u_guided = 0.5 * (a_1,y_hat + a_2,y_hat)
 
 ## 10. Smoke、pilot 指标与身份分析
 
-在正式 pilot 前，N1 的 D1/D2 各运行 1 epoch：仍使用全部 720 条唯一 train-known；known calibration 和 surrogate unknown 各类别只取冻结 manifest 顺序的前 2 对做链路评价。smoke 是 diagnostic，不进入 gate。
+在正式 pilot 前，N1 的 D1/D2 各运行 6 epoch，以同时覆盖 epoch 1–5 的 adapter 冻结路径和 epoch 6 的解冻路径；每轮仍使用全部 720 条唯一 train-known，known calibration 和 surrogate unknown 各类别只取冻结 manifest 顺序的前 2 对做链路评价。smoke 是 diagnostic，不进入 gate。
 
 Pilot 固定运行 N1/N4/N2 × D1/D2 共 6 项。每种方法报告 Known Accuracy、Known Macro-F1、AUROC、OSCR、FPR95、KCCR、URR、KCCR/URR harmonic mean 和 K+1 Macro-F1。每个 surrogate identity 单独报告 AUROC、URR、FPR95 和全部 false-accept 去向。
 
