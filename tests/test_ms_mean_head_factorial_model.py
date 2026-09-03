@@ -78,6 +78,45 @@ def test_r2_and_r3_have_identical_multiscale_structure_except_for_the_head() -> 
     assert isinstance(r3.global_head, ARPLReciprocalHead)
 
 
+def test_r2_feature_map_interface_preserves_legacy_forward_and_checkpoint_state() -> None:
+    r2 = _seeded_model("R2_MS_MEAN_CE", seed=20260903).eval()
+    encoder = r2.encoder
+    inputs = torch.randn(3, 601, generator=torch.Generator().manual_seed(731))
+
+    checkpoint_state = clone_state_dict(r2.state_dict())
+    state_keys_before = tuple(r2.state_dict())
+    parameter_names_before = tuple(name for name, _ in r2.named_parameters())
+    parameter_count_before = sum(parameter.numel() for parameter in r2.parameters())
+
+    with torch.no_grad():
+        legacy_feature_map = encoder.stages(encoder.stem(inputs.unsqueeze(1)))
+        legacy_pooled = torch.cat(
+            [
+                encoder.average_pool(legacy_feature_map).flatten(1),
+                encoder.maximum_pool(legacy_feature_map).flatten(1),
+            ],
+            dim=1,
+        )
+        legacy_forward = encoder.projection(legacy_pooled)
+        exposed_feature_map = encoder.forward_feature_map(inputs)
+        current_forward = encoder(inputs)
+
+    assert exposed_feature_map.shape == (3, 128, 76)
+    assert torch.equal(exposed_feature_map, legacy_feature_map)
+    assert torch.equal(current_forward, legacy_forward)
+    assert tuple(r2.state_dict()) == state_keys_before
+    assert tuple(name for name, _ in r2.named_parameters()) == parameter_names_before
+    assert sum(parameter.numel() for parameter in r2.parameters()) == parameter_count_before
+    assert not any("feature_map" in name for name in r2.state_dict())
+
+    restored = _seeded_model("R2_MS_MEAN_CE", seed=17)
+    incompatible = restored.load_state_dict(checkpoint_state, strict=True)
+    assert incompatible.missing_keys == []
+    assert incompatible.unexpected_keys == []
+    assert tuple(restored.state_dict()) == state_keys_before
+    assert _state_sha256(restored.state_dict()) == _state_sha256(checkpoint_state)
+
+
 def test_r3_is_forward_loss_and_gradient_equivalent_to_legacy_m2() -> None:
     model_seed = 20260831
     torch.manual_seed(model_seed)

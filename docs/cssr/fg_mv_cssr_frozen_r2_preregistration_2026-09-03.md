@@ -259,3 +259,11 @@ B0–B4 均输出 Known Accuracy、Known Macro-F1、AUROC、OSCR、FPR95、KCCR�
 最终只能得出以下之一：快速路线无 CSSR 信号并停止；某一固定 CSSR 规则在新 pair confirmation 失败并停止；或某一规则值得后续完整验证。不能声称最终未知性能、统计显著性、完整 CSSR 复现或方法创新已经成立。
 
 `RESEARCH_CONTEXT.md` 不修改，所有已有实验产物不覆盖，`final_unknown_test_authorized=false`，`cssr_arpl_combination_authorized=false`。
+
+## 12. Smoke 前审计绑定补充
+
+本补充写于任何 smoke、pilot 或 confirmation 性能产生前，不改变模型、数据、评分、gate 或停止规则，只补强旧 R2 证据绑定。上一轮正式 confirmation 根哈希清单 SHA-256 固定为：
+
+`edcf281df07443724d0ade1a0b2d8b20305f85b83099fb74e1c6417ee5d5477c`
+
+七个 `fold_0 / seed_20260830 / R2_MS_MEAN_CE` 单元的 checkpoint、pair manifest 和 `features_logits_scores.npz` 已知 SHA-256 全部逐项写入独立实验配置。运行时必须同时验证根哈希清单、配置内逐文件哈希、单元自身哈希清单、重建 manifest 字节、checkpoint metadata/strict-load 和旧输出逐值一致；不能只接受一套内部自洽但来源已替换的 R2 产物。

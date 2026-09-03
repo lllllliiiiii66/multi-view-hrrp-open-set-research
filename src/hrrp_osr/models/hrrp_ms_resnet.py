@@ -152,12 +152,22 @@ class HRRPMultiScaleResNet1D(nn.Module):
                 if module.bias is not None:
                     nn.init.zeros_(module.bias)
 
-    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+    def forward_feature_map(self, inputs: torch.Tensor) -> torch.Tensor:
+        """Return the final residual feature map without changing model state.
+
+        This read-only interface exposes the tensor immediately before the
+        existing global average/max pooling path.  It intentionally adds no
+        parameters so historical checkpoints remain strict-load compatible.
+        """
+
         if inputs.ndim == 2:
             inputs = inputs.unsqueeze(1)
         if inputs.ndim != 3 or inputs.shape[1:] != (1, self.input_length):
             raise ValueError("HRRP input must have shape [batch, 601] or [batch, 1, 601]")
-        features = self.stages(self.stem(inputs))
+        return self.stages(self.stem(inputs))
+
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        features = self.forward_feature_map(inputs)
         pooled = torch.cat(
             [self.average_pool(features).flatten(1), self.maximum_pool(features).flatten(1)],
             dim=1,
