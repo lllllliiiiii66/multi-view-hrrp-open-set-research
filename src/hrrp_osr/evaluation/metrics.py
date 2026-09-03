@@ -15,6 +15,13 @@ def _one_dimensional(values: np.ndarray | Iterable[Any], name: str) -> np.ndarra
     return array
 
 
+def _trapezoid_area(values: np.ndarray, coordinates: np.ndarray) -> float:
+    trapezoid = getattr(np, "trapezoid", None)
+    if trapezoid is None:
+        trapezoid = np.trapz
+    return float(trapezoid(values, coordinates))
+
+
 def accuracy_score(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     true = _one_dimensional(y_true, "y_true")
     pred = _one_dimensional(y_pred, "y_pred")
@@ -131,7 +138,7 @@ def oscr_score(
         ],
         dtype=np.float64,
     )
-    return float(np.trapezoid(correct_classification_rates, false_positive_rates))
+    return _trapezoid_area(correct_classification_rates, false_positive_rates)
 
 
 def evaluate_open_set(

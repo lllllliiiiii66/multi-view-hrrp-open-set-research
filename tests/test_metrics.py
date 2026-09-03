@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 from hrrp_osr.evaluation.metrics import (
+    _trapezoid_area,
     binary_auroc,
     evaluate_open_set,
     fpr_at_unknown_tpr,
@@ -11,6 +12,22 @@ from hrrp_osr.evaluation.metrics import (
     open_set_operating_point,
     threshold_for_known_acceptance,
 )
+
+
+def test_trapezoid_area_supports_numpy_1_x_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    values = np.array([0.0, 0.5, 1.0])
+    coordinates = np.array([0.0, 0.25, 1.0])
+    expected = _trapezoid_area(values, coordinates)
+    calls: list[bool] = []
+
+    def legacy_trapz(_values: np.ndarray, _coordinates: np.ndarray) -> float:
+        calls.append(True)
+        return expected
+
+    monkeypatch.setattr(np, "trapezoid", None, raising=False)
+    monkeypatch.setattr(np, "trapz", legacy_trapz, raising=False)
+    assert _trapezoid_area(values, coordinates) == pytest.approx(expected)
+    assert calls == [True]
 
 
 def test_hand_calculated_accuracy_macro_f1_auroc_and_fpr95() -> None:
