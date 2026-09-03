@@ -121,6 +121,8 @@ dropout = 0.1
 
 不 early stop；epoch 20 是唯一正式 checkpoint；epoch 0/5/10/15/20 只保存诊断，不参与选择。
 
+学习率因子在每个 epoch 训练开始前设置。epoch 1/2 分别为 `0.5/1.0`；对 epoch `e=3..20`，固定为 `0.5 * (1 + cos(pi * (e-3) / 18))`。因此 20 个 epoch 都进行非零权重更新，完成 epoch 20 后的概念下一步才到 0；不得让 epoch 20 只更新 BatchNorm buffers 而权重学习率为 0。
+
 ## 5. 动态去重二视角配对
 
 每个 epoch、每个 known 类从按 `(model_label, sample_id)` 排序的唯一 train-known 底层 HRRP 出发。`epoch_seed` 由字符串 `fg_mv_cssr_e2e_pair_schedule_v1|finetune_seed|pair_id|fold|epoch|model_label` 的 SHA-256 前 8 字节按大端无符号整数得到。每类只初始化一次 `numpy.random.Generator(PCG64(epoch_seed))`，按 attempt `0..4095` 连续消费同一 RNG；每次依次打乱左侧样本及每个左侧样本的合法右侧候选顺序，再用确定性 DFS 增广路径二分图匹配选择完整一一映射。只有 frame 不同的右侧样本才是候选；完整匹配后若存在 `a→b` 与 `b→a` 的二循环则拒绝该 attempt，因为它重复了同一无序 pair。取首个完整且无二循环的匹配：左侧顺序构成 view1，匹配结果构成 view2。跨 frame 已保证样本不与自身配对；4096 次均失败则实验失败。

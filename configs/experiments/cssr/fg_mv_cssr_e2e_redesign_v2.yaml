@@ -234,6 +234,10 @@ training:
   batch_size_pairs: 64
   warmup_epochs: 2
   scheduler: linear_warmup_then_cosine_to_zero
+  scheduler_step_timing: before_each_epoch_optimizer_updates
+  scheduler_factor_formula: "epoch<=2:epoch/2;epoch>2:0.5*(1+cos(pi*(epoch-3)/18));post_epoch_20:0"
+  all_formal_epochs_have_nonzero_learning_rate: true
+  zero_reached_after_formal_epoch: true
   gradient_clip_norm: 5.0
   finetune_seed: 20260904
   lr_last_stage: 3.0e-5
