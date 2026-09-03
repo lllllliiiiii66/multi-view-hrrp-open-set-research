@@ -60,7 +60,9 @@ CSSR 只重构该单视角语义图，不重构原始 601 维 HRRP，也不重�
 - commit：`d5a99e91f310ec274c7bfe5796fb270719a07ab3`；
 - `methods/cssr.py` SHA-256：`0d23558c6a3cc4bf068036502a8ab43ee6278aecd91d96741f7375a142d9c5a3`；
 - `methods/cssr_ft.py` SHA-256：`31244f194d91f6cab0bdf34eb14a0ed3b58f25b6c49a44042bb96baa9977fb16`；
-- `configs/pcssr.json` SHA-256：`353b0768cc6ee60ac76c110a22da8bdb5c15179260d4abeb2f43fee422d24c6b`。
+- `configs/basic.json` SHA-256：`672375c6838004ae604509ba57098c7fefd17b6ac0f38e7c955fc8c09ba3192a`；
+- `configs/pcssr.json` SHA-256：`353b0768cc6ee60ac76c110a22da8bdb5c15179260d4abeb2f43fee422d24c6b`；
+- `configs/rcssr.json` SHA-256：`af40084644b4794559403f91e9d43a3008420df78484d87ec825e6d48b3d6f68`。
 
 本轮名称固定为 `PCSSR_CORE_1D`。它只复用官方 pCSSR 的类别特定重构、负 L1 logit、clip、`softmax_avg` 和 scale-normalized reconstruction score 核心，不实现完整 pCSSR 的 feature prototype、Gram score、训练分数标准化或多分数集成，因此不得表述为完整 CSSR 复现。
 
@@ -157,10 +159,11 @@ p_{v,k}=\frac{1+\#\{r\in R_k:r\ge\rho_{v,k}\}}{|R_k|+1},
 令融合最大 logit 为 \(m=\max_k\operatorname{logits}_{{\rm fused},k}\)，MLS 非一致性为 \(r_{\rm mls}=-m\)。对 known calibration 中真实类别为 \(k\) 且 R2 正确预测为 \(k\) 的 pair 建立 \(R_k^{\rm MLS}\)。按 R2 预测类 \(\hat y\) 定义：
 
 \[
-p_{\rm MLS}=\frac{1+\#\{r\in R_{\hat y}^{\rm MLS}:r\ge r_{\rm mls}\}}
-{|R_{\hat y}^{\rm MLS}|+1},
-\qquad u_{\rm B1}=-\log(p_{\rm MLS}+10^{-8}).
+u_{\rm B1}=\frac{1+\#\{r\in R_{\hat y}^{\rm MLS}:r\le r_{\rm mls}\}}
+{|R_{\hat y}^{\rm MLS}|+1}.
 \]
+
+这是预测类别条件的非一致性经验分位数，越大越异常；不再施加第二个可调变换。
 
 known calibration pair 对自身所属且正确预测的参考分布采用 leave-one-pair-out；不按 surrogate 结果改变参考集。若任一预测类别没有非空 known-only 参考分布，实验直接失败。
 
@@ -247,7 +250,7 @@ B0–B4 均输出 Known Accuracy、Known Macro-F1、AUROC、OSCR、FPR95、KCCR�
 
 1. 官方核心差分与完整本地 pytest；
 2. Python compile、配置校验、`git diff --check`；
-3. P0/N1 极小 smoke，只验证链路和审计，性能不参与决策；
+3. P0/N1 极小 smoke：这里的 P0 指 pilot 第一个任务、即 `N1/fold_0/R2 seed 20260830`，固定每个已知类取 2 个唯一 train base、每个评价角色每类取前 2 个 pair、CSSR 训练 1 epoch；只验证链路和审计，性能不参与决策；
 4. 三项 pilot；
 5. 聚合并按冻结 gate 产生唯一信号；
 6. 只有非 `no_cssr_signal` 才运行四项 confirmation；
