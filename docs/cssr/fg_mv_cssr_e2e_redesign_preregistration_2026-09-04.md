@@ -123,7 +123,7 @@ dropout = 0.1
 
 ## 5. 动态去重二视角配对
 
-每个 epoch、每个 known 类从按 `(model_label, sample_id)` 排序的唯一 train-known 底层 HRRP 出发。`epoch_seed` 由字符串 `fg_mv_cssr_e2e_pair_schedule_v1|finetune_seed|pair_id|fold|epoch|model_label` 的 SHA-256 前 8 字节按大端无符号整数得到。以 `numpy.random.Generator(PCG64(epoch_seed))` 打乱左侧样本及每个左侧样本的右侧候选顺序，再用确定性增广路径二分图匹配选择完整一一映射；只有 frame 不同的右侧样本才是候选。左侧顺序构成 view1，匹配结果构成 view2。跨 frame 已保证样本不与自身配对；匹配失败则实验失败。
+每个 epoch、每个 known 类从按 `(model_label, sample_id)` 排序的唯一 train-known 底层 HRRP 出发。`epoch_seed` 由字符串 `fg_mv_cssr_e2e_pair_schedule_v1|finetune_seed|pair_id|fold|epoch|model_label` 的 SHA-256 前 8 字节按大端无符号整数得到。每类只初始化一次 `numpy.random.Generator(PCG64(epoch_seed))`，按 attempt `0..4095` 连续消费同一 RNG；每次依次打乱左侧样本及每个左侧样本的合法右侧候选顺序，再用确定性 DFS 增广路径二分图匹配选择完整一一映射。只有 frame 不同的右侧样本才是候选；完整匹配后若存在 `a→b` 与 `b→a` 的二循环则拒绝该 attempt，因为它重复了同一无序 pair。取首个完整且无二循环的匹配：左侧顺序构成 view1，匹配结果构成 view2。跨 frame 已保证样本不与自身配对；4096 次均失败则实验失败。
 
 五类 pair 合并后，再用字符串 `fg_mv_cssr_e2e_batch_order_v1|finetune_seed|pair_id|fold|epoch` 的 SHA-256 前 8 字节初始化同一种 PCG64，对 720 对做一次全局 permutation；该顺序就是 epoch 的固定 DataLoader 顺序，不再 shuffle。
 
