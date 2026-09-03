@@ -1968,7 +1968,7 @@ def build_error_analysis(
     return summary, absorption_rows, angle_rows
 
 
-def _configure_runtime(config: Mapping[str, Any], device: torch.device) -> dict[str, Any]:
+def _configure_numerical_runtime(config: Mapping[str, Any]) -> dict[str, Any]:
     runtime = config["runtime"]
     if os.environ.get("CUBLAS_WORKSPACE_CONFIG") != ":4096:8":
         raise DataValidationError("CUBLAS_WORKSPACE_CONFIG changed")
@@ -1977,6 +1977,16 @@ def _configure_runtime(config: Mapping[str, Any], device: torch.device) -> dict[
         torch.backends.cudnn.allow_tf32 = False
         torch.backends.cudnn.benchmark = False
     torch.use_deterministic_algorithms(bool(runtime["deterministic_algorithms"]))
+    return {
+        "deterministic_algorithms": torch.are_deterministic_algorithms_enabled(),
+        "tf32": False,
+        "cudnn_benchmark": False,
+    }
+
+
+def _configure_runtime(config: Mapping[str, Any], device: torch.device) -> dict[str, Any]:
+    numerical_runtime = _configure_numerical_runtime(config)
+    runtime = config["runtime"]
     if device.type != "cuda":
         raise DataValidationError("smoke and formal CSSR units require CUDA")
     observed_gpu = torch.cuda.get_device_name(device)
@@ -1989,11 +1999,10 @@ def _configure_runtime(config: Mapping[str, Any], device: torch.device) -> dict[
         "device_name": observed_gpu,
         "torch_version": torch.__version__,
         "cuda_version": torch.version.cuda,
-        "deterministic_algorithms": torch.are_deterministic_algorithms_enabled(),
         "amp": False,
-        "tf32": False,
         "torch_compile": False,
         "num_workers": int(runtime["num_workers"]),
+        **numerical_runtime,
     }
 
 
@@ -2534,6 +2543,10 @@ def audit_unit_result(
     phase: str,
     pair_id: str,
 ) -> dict[str, Any]:
+    # ``aggregate`` and ``audit`` run in fresh processes.  Reapply the same
+    # CUDA numerical contract used by ``run-unit`` before replaying Conv1d;
+    # otherwise a container default such as cuDNN TF32 can change rho.
+    _configure_numerical_runtime(config)
     root = Path(destination).resolve()
     required = {
         "source_pair_manifest.csv", "unique_base_sample_manifest.csv",

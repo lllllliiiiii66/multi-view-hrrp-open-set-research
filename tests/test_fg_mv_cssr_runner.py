@@ -581,3 +581,58 @@ def test_no_signal_pilot_gate_cannot_authorize_confirmation(
             tmp_path / "pilot",
             load_fg_mv_cssr_config(CONFIG_PATH),
         )
+
+
+def test_numerical_runtime_reapplies_frozen_cuda_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = load_fg_mv_cssr_config(CONFIG_PATH)
+    original_matmul_tf32 = torch.backends.cuda.matmul.allow_tf32
+    original_cudnn_tf32 = torch.backends.cudnn.allow_tf32
+    original_benchmark = torch.backends.cudnn.benchmark
+    original_deterministic = torch.are_deterministic_algorithms_enabled()
+    try:
+        monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+        torch.backends.cudnn.benchmark = True
+        torch.use_deterministic_algorithms(False)
+
+        observed = runner._configure_numerical_runtime(config)
+
+        assert torch.backends.cuda.matmul.allow_tf32 is False
+        assert torch.backends.cudnn.allow_tf32 is False
+        assert torch.backends.cudnn.benchmark is False
+        assert torch.are_deterministic_algorithms_enabled() is True
+        assert observed == {
+            "deterministic_algorithms": True,
+            "tf32": False,
+            "cudnn_benchmark": False,
+        }
+    finally:
+        torch.backends.cuda.matmul.allow_tf32 = original_matmul_tf32
+        torch.backends.cudnn.allow_tf32 = original_cudnn_tf32
+        torch.backends.cudnn.benchmark = original_benchmark
+        torch.use_deterministic_algorithms(original_deterministic)
+
+
+def test_unit_audit_reapplies_numerical_runtime_before_artifact_checks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = load_fg_mv_cssr_config(CONFIG_PATH)
+    calls: list[Mapping[str, Any]] = []
+    monkeypatch.setattr(
+        runner,
+        "_configure_numerical_runtime",
+        lambda observed: calls.append(observed),
+    )
+
+    with pytest.raises(DataValidationError, match="missing files"):
+        runner.audit_unit_result(
+            tmp_path,
+            config=config,
+            phase="smoke",
+            pair_id="N1",
+        )
+
+    assert calls == [config]
