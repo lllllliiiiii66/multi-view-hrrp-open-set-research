@@ -12,7 +12,10 @@ torch = pytest.importorskip("torch")
 
 from hrrp_osr.data.errors import DataConfigError, DataValidationError  # noqa: E402
 from hrrp_osr.models.arpl import ARPLReciprocalHead  # noqa: E402
-from hrrp_osr.models.hrrp_ms_resnet import HRRPMultiScaleResNet1D  # noqa: E402
+from hrrp_osr.models.hrrp_ms_resnet import (  # noqa: E402
+    DeterministicGlobalMaxPool1D,
+    HRRPMultiScaleResNet1D,
+)
 from hrrp_osr.models.mv_rpformer import (  # noqa: E402
     METHODS,
     MVRPFormer,
@@ -79,6 +82,42 @@ def test_multi_scale_encoder_shape_scales_pooling_and_parameter_budget() -> None
     for stage in encoder.stages:
         assert [branch[0].kernel_size[0] for branch in stage.branches] == [3, 7, 15]
         assert all(branch[0].groups == 1 for branch in stage.branches)
+
+
+def test_deterministic_global_max_pool_matches_adaptive_pool_forward_and_backward() -> None:
+    actual_inputs = torch.tensor(
+        [
+            [[1.0, 2.0, 2.0, 0.0], [-1.0, -3.0, -2.0, -1.0]],
+            [[4.0, 1.0, 3.0, 2.0], [0.0, 0.0, 0.0, 0.0]],
+        ],
+        requires_grad=True,
+    )
+    reference_inputs = actual_inputs.detach().clone().requires_grad_(True)
+    gradient = torch.tensor([[[1.0], [2.0]], [[3.0], [4.0]]])
+
+    actual = DeterministicGlobalMaxPool1D()(actual_inputs)
+    reference = torch.nn.AdaptiveMaxPool1d(1)(reference_inputs)
+    actual.backward(gradient)
+    reference.backward(gradient)
+
+    torch.testing.assert_close(actual, reference, rtol=0.0, atol=0.0)
+    torch.testing.assert_close(
+        actual_inputs.grad, reference_inputs.grad, rtol=0.0, atol=0.0
+    )
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is unavailable")
+def test_deterministic_global_max_pool_cuda_backward() -> None:
+    previous = torch.are_deterministic_algorithms_enabled()
+    try:
+        torch.use_deterministic_algorithms(True)
+        inputs = torch.randn(4, 8, 17, device="cuda", requires_grad=True)
+        DeterministicGlobalMaxPool1D()(inputs).sum().backward()
+        torch.cuda.synchronize()
+        assert inputs.grad is not None
+        assert torch.isfinite(inputs.grad).all()
+    finally:
+        torch.use_deterministic_algorithms(previous)
 
 
 def test_sab_tokens_are_swap_equivariant() -> None:

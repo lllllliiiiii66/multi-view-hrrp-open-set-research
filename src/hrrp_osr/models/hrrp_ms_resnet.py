@@ -66,6 +66,15 @@ class MultiScaleResidualStage1D(nn.Module):
         return self.dropout(self.activation(combined + self.residual(inputs)))
 
 
+class DeterministicGlobalMaxPool1D(nn.Module):
+    """Global max pooling with deterministic CUDA backward semantics."""
+
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        if inputs.ndim != 3:
+            raise ValueError("global max pooling expects [batch, channels, length]")
+        return torch.max(inputs, dim=-1, keepdim=True).values
+
+
 class HRRPMultiScaleResNet1D(nn.Module):
     """Shared, angle-free multi-scale residual encoder for 601-bin HRRP."""
 
@@ -122,7 +131,7 @@ class HRRPMultiScaleResNet1D(nn.Module):
             ]
         )
         self.average_pool = nn.AdaptiveAvgPool1d(1)
-        self.maximum_pool = nn.AdaptiveMaxPool1d(1)
+        self.maximum_pool = DeterministicGlobalMaxPool1D()
         self.projection = nn.Sequential(
             nn.Linear(2 * stage_channels[-1], feature_dim),
             nn.LayerNorm(feature_dim),
