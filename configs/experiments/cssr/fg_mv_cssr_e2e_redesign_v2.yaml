@@ -1,0 +1,396 @@
+schema_version: 1
+stage: P3_fg_mv_cssr_e2e_redesign_fast_iteration
+experiment_id: fg_mv_cssr_e2e_redesign_v2
+result_scope: diagnostic_smoke_then_conditional_surrogate_confirmation
+
+evidence_scope:
+  source_known_odd_angle_only: true
+  final_unknown_classes_used: false
+  even_angle_test_used: false
+  surrogate_unknown_used_for_training: false
+  surrogate_unknown_used_for_reference_distribution: false
+  surrogate_unknown_used_for_threshold: false
+  known_calibration_used_for_training: false
+  arpl_used: false
+  pseudo_unknown_used: false
+  angle_metadata_used_by_model: false
+
+prior_r2:
+  result_commit: edb05062d07be1984067f91759d6029cd9c0bf9a
+  formal_code_commit: 62e318de82b4221b599e06b1166483673e9c1cd3
+  experiment_id: ms_mean_head_factorial_surrogate_v1
+  method: R2_MS_MEAN_CE
+  phase: confirmation
+  angle_fold: 0
+  initialization_seed: 20260830
+  checkpoint_epoch: 100
+  checkpoint_selection: fixed_final_epoch
+  source_config: configs/experiments/arpl/ms_mean_head_factorial_surrogate_v1.yaml
+  source_config_sha256: c11daa6e2e5a7d7b72bc36840e60fc871f332c4fc85652636c729aa2eba14c71
+  unit_relative_template: "{pair_id}/fold_0/seed_20260830/R2_MS_MEAN_CE"
+  root_artifact_hash_manifest_sha256: edcf281df07443724d0ade1a0b2d8b20305f85b83099fb74e1c6417ee5d5477c
+  unit_artifact_hashes:
+    N0:
+      checkpoint.pt: 142a85b3a090213684126cf695b08fec259724a0bd8399dc1adb40b114aab192
+      pair_manifest.csv: 37dac18016223e08451c6551e279a6136ed494cb9c86edb5f0a938d71a2b115d
+      features_logits_scores.npz: a6bc7f4b1c095976964716e70c72666c0133f0bb3b5a63aacbc5612d9a888c93
+    N1:
+      checkpoint.pt: a4f6fa3235fbb5cf74b712588a0318f614a05287adec4ee881820424cddbcbaa
+      pair_manifest.csv: 0b8a97dcfd744896bbae912c1363379201ced18a55107f80b2d2f3256fb5c5bc
+      features_logits_scores.npz: b43da73179b8ddb0e0ae1f97b3724e9fcffe9ce32f10aaa6466cc8f408a74275
+    N2:
+      checkpoint.pt: 14e2ac7b686c901112f969fe0bd7f53c29646e7c015bae794d30c39051f9c0b9
+      pair_manifest.csv: 1a7dc0031cf5b32a41131289fb4117a144463c025e93bc7a487e56a3c8c8bd2d
+      features_logits_scores.npz: 58e8086e8ba27e2c4537d98d5ec1e6faaaa1bdf3d47cfec6ad9278227279114a
+    N3:
+      checkpoint.pt: 6427a09f3e4a5e67ff652fea6e44c8364b62381acc8338099dccc818ac284bc9
+      pair_manifest.csv: 53fead93617851f8646dc7c76ff3773b6c55a720d3be17feda462535994e7d27
+      features_logits_scores.npz: 05ef84488ee515e09afbdf4504fdd1dd8597347faa63442a49abc32265caa6e8
+    N4:
+      checkpoint.pt: 169387ad7a87463110ac7a2cd45afd7dac49428538c93c84975162e425d94ff5
+      pair_manifest.csv: 8b0202d1e08ae83eec4bf07fc1dbb6a3f39fef2378ac15e57635709d8872b41a
+      features_logits_scores.npz: 942e6c14d2237120ca9937a23df7f095ce718ea072933ee52d0ab2d3c3c79e95
+    N5:
+      checkpoint.pt: 74cde2c6b30f1fa96219fe20777dfc632575c8c3c0281706ca016ef2497642df
+      pair_manifest.csv: a706c63e47f8522510c2926e70a8072ca8ca183c5ef74957b8451d28d2c47c80
+      features_logits_scores.npz: ab748cce5fbb8f1299fe720311e2c1da3805bda070b3b47b5db46f886805eee5
+    N6:
+      checkpoint.pt: 178dbaa9e461d28825124b688752ed5c1005a8f0265963ef57e5c27a0a65e86e
+      pair_manifest.csv: 46b454fc313573121fcf6ad214b91f9e21a2cb996a38d3beaf9c83d8321ce140
+      features_logits_scores.npz: b11a125b08a236f182857030fc07770d22a1890f5d20e68efa0f3fade4a4b20b
+  strict_load_required: true
+  old_logits_exact_match_required: true
+
+bundle:
+  dataset_id: hrrp_10class_theta83_hh_v1
+  preprocessing_id: hrrp_padding_complex_gaussian_v1
+  profiles_sha256: 2dd92282c125f0f677cf1f2dfce828781c8ba4385cf9ae552c4a2c56033c3f5b
+  manifest_sha256: 748b9f30629c3b3cbe66c6a1dac30863fdab2d81a214e46d8bc3ef7c6022a08a
+  bundle_sha256: 79176091b5b745e5df5957f1bb4ade7304c1403a4a32e64622e012db67d5a0c5
+
+classes:
+  source_known_order:
+    - CVN77
+    - DDG-1000
+    - DDG-112
+    - 油气轮MARVEL CRANE
+    - 爱达魔都号
+    - 迷你好望角型散货船
+    - 集装箱船达飞罗尔多夫级
+  identity_pairs:
+    - pair_id: N0
+      surrogate_unknown_indices: [0, 2]
+      train_known_indices: [1, 3, 4, 5, 6]
+    - pair_id: N1
+      surrogate_unknown_indices: [2, 5]
+      train_known_indices: [0, 1, 3, 4, 6]
+    - pair_id: N2
+      surrogate_unknown_indices: [3, 5]
+      train_known_indices: [0, 1, 2, 4, 6]
+    - pair_id: N3
+      surrogate_unknown_indices: [1, 3]
+      train_known_indices: [0, 2, 4, 5, 6]
+    - pair_id: N4
+      surrogate_unknown_indices: [1, 6]
+      train_known_indices: [0, 2, 3, 4, 5]
+    - pair_id: N5
+      surrogate_unknown_indices: [4, 6]
+      train_known_indices: [0, 1, 2, 3, 5]
+    - pair_id: N6
+      surrogate_unknown_indices: [0, 4]
+      train_known_indices: [1, 2, 3, 5, 6]
+  pilot_pairs: [N1, N4, N2]
+  confirmation_pairs: [N0, N3, N5, N6]
+
+data:
+  angle_fold: 0
+  development_angle_parity: odd
+  view_count: 2
+  train_unique_base_samples_per_class: 144
+  known_calibration_unique_base_samples_per_class: 36
+  evaluation_pairs_per_class: 500
+  final_test_pairs_generated: false
+  dynamic_pair_schedule:
+    algorithm: deterministic_cross_frame_derangement_v1
+    base_order: [model_label, sample_id]
+    epoch_seed_material: "fg_mv_cssr_e2e_pair_schedule_v1|finetune_seed|pair_id|fold|epoch|model_label"
+    epoch_seed_hash: sha256_first_8_bytes_big_endian_unsigned
+    random_generator: numpy_PCG64
+    matching: deterministic_augmenting_path_bipartite
+    maximum_matching_attempts: 4096
+    allowed_edge: different_15_degree_frame_only
+    unordered_pair_unique_within_class_epoch: true
+    view1_usage_per_base_per_epoch: 1
+    view2_usage_per_base_per_epoch: 1
+    dataloader_shuffle: false
+    batch_order_seed_material: "fg_mv_cssr_e2e_batch_order_v1|finetune_seed|pair_id|fold|epoch"
+    save_epoch_manifests: true
+    save_usage_audit: true
+    fail_if_infeasible: true
+  smoke:
+    pair_id: N1
+    methods:
+      - Q1_CE_FINETUNE_CONTROL
+      - Q2_E2E_REL_CSSR_1X1
+      - Q3_E2E_ABSREL_CSSR_1X1
+      - Q4_E2E_ABSREL_CSSR_LOCAL3
+    epochs: 1
+    full_train_unique_base_schedule: true
+    evaluation_pairs_per_class: 2
+    diagnostic_only: true
+
+normalization:
+  method: reuse_exact_r2_global_scalar_zscore
+  epsilon: 1.0e-8
+
+r2_model:
+  architecture: ms_mean_head_factorial_v1
+  encoder: hrrp_ms_resnet_1d_v1
+  input_length: 601
+  feature_map_shape: [128, 76]
+  pooled_feature_dim: 128
+  fusion: arithmetic_mean
+  head: linear_ce
+  prediction: own_fused_logits_argmax
+  dropout: 0.1
+
+methods:
+  ordered:
+    - Q0_FROZEN_R2_CC_MLS
+    - Q1_CE_FINETUNE_CONTROL
+    - Q2_E2E_REL_CSSR_1X1
+    - Q3_E2E_ABSREL_CSSR_1X1
+    - Q4_E2E_ABSREL_CSSR_LOCAL3
+  trainable:
+    - Q1_CE_FINETUNE_CONTROL
+    - Q2_E2E_REL_CSSR_1X1
+    - Q3_E2E_ABSREL_CSSR_1X1
+    - Q4_E2E_ABSREL_CSSR_LOCAL3
+  cssr_candidates:
+    - Q2_E2E_REL_CSSR_1X1
+    - Q3_E2E_ABSREL_CSSR_1X1
+    - Q4_E2E_ABSREL_CSSR_LOCAL3
+  q0_retraining: false
+
+trainable_scope:
+  frozen_modules: [encoder.stem, encoder.stages.0, encoder.stages.1]
+  frozen_modules_forced_eval: true
+  trainable_modules: [encoder.stages.2, encoder.projection, global_head]
+  cssr_autoencoders_trainable_for_q2_q4: true
+  frozen_parameters_and_buffers_hash_required: true
+  strict_r2_load_required: true
+  epoch0_common_state_exact_match_required: true
+  reset_rng_after_model_and_optimizer_construction: true
+
+autoencoders:
+  class_count: 5
+  input_channels: 128
+  latent_channels: 64
+  independent_per_class: true
+  bias: false
+  activation: Tanh
+  q2_q3_kernel_size: 1
+  q2_q3_padding: 0
+  q2_q3_same_initialization_required: true
+  q4_kernel_size: 3
+  q4_padding: 1
+  skip_connection: false
+  normalization_layer: none
+  attention: false
+  extra_hidden_layers: 0
+
+loss:
+  relative:
+    gamma: 0.1
+    clip_min: -100.0
+    clip_max: 100.0
+    reconstruction_error: channel_sum_L1
+    probability_order: class_softmax_per_position_then_position_mean
+    view_reduction: arithmetic_mean
+  absolute_reconstruction:
+    numerator: per_sample_view_mean_absolute_reconstruction_error_over_channels_and_positions
+    denominator: per_sample_view_mean_absolute_activation_over_channels_and_positions_plus_epsilon
+    epsilon: 1.0e-8
+  separation:
+    nearest_wrong_class: minimum_normalized_absolute_reconstruction_error
+    margin: 0.2
+  batch_reduction: arithmetic_mean
+  weights:
+    Q1_CE_FINETUNE_CONTROL: {classification: 1.0, relative: 0.0, absolute: 0.0, separation: 0.0}
+    Q2_E2E_REL_CSSR_1X1: {classification: 1.0, relative: 0.5, absolute: 0.0, separation: 0.0}
+    Q3_E2E_ABSREL_CSSR_1X1: {classification: 1.0, relative: 0.5, absolute: 0.25, separation: 0.5}
+    Q4_E2E_ABSREL_CSSR_LOCAL3: {classification: 1.0, relative: 0.5, absolute: 0.25, separation: 0.5}
+  gradient_audit:
+    ratio_scope: weighted_auxiliary_to_classification_on_last_residual_stage
+    denominator_floor: 1.0e-12
+    maximum_ratio: 100.0
+    consecutive_epoch_mean_violations_to_fail: 3
+    ae_gradients_record_only: true
+    fail_on_nonfinite: true
+
+training:
+  optimizer: AdamW
+  epochs: 20
+  batch_size_pairs: 64
+  warmup_epochs: 2
+  scheduler: linear_warmup_then_cosine_to_zero
+  gradient_clip_norm: 5.0
+  finetune_seed: 20260904
+  lr_last_stage: 3.0e-5
+  lr_projection_and_ce_head: 1.0e-4
+  lr_autoencoders: 1.0e-3
+  weight_decay_last_stage: 5.0e-4
+  weight_decay_projection_and_head: 5.0e-4
+  weight_decay_autoencoders: 1.0e-4
+  early_stopping: false
+  formal_checkpoint_epoch: 20
+  performance_checkpoint_selection: false
+  diagnostic_epochs: [0, 5, 10, 15, 20]
+
+diagnostics:
+  known_calibration_only: true
+  every_epoch: true
+  metric_names:
+    - accuracy
+    - macro_f1
+    - nll
+    - brier
+    - ece
+    - mean_max_logit
+    - mean_top1_top2_logit_margin
+    - mean_single_view_feature_norm
+    - mean_fused_feature_norm
+    - ce_head_weight_norm
+    - mean_fused_feature_l2_drift_from_epoch0
+    - mean_kl_epoch0_to_current
+  brier: per_sample_sum_over_class_then_sample_mean
+  ece_bins: 15
+  ece_bin_type: equal_width
+  feature_drift: mean_pairwise_fused_feature_l2_from_epoch0
+  kl_direction: epoch0_to_current
+  diagnostic_only: true
+
+calibration:
+  cssr_reference_population: unique_known_calibration_base_samples_by_true_class
+  cssr_reference_shared_across_view_slots: true
+  cssr_reference_tail: greater_than_or_equal_r
+  cssr_p_value_smoothing: plus_one_numerator_and_denominator
+  cssr_score_transform: negative_log_p_plus_epsilon
+  cssr_leave_one_base_sample_out: true
+  mls_reference: correctly_predicted_known_calibration_pairs_by_true_class
+  mls_nonconformity: negative_maximum_fused_logit
+  mls_anomaly_quantile_tail: less_than_or_equal_nonconformity
+  mls_leave_one_pair_out: true
+  empty_class_reference_policy: fail
+  score_epsilon: 1.0e-8
+  threshold_source: own_known_calibration_only
+  threshold_known_acceptance_rate: 0.95
+  threshold_rule: exact_sorted_rank_ceiling
+
+scores:
+  direction: larger_is_more_unknown
+  known_prediction: own_fused_ce_argmax
+  main_by_method:
+    Q0_FROZEN_R2_CC_MLS: class_conditional_mls
+    Q1_CE_FINETUNE_CONTROL: class_conditional_mls
+    Q2_E2E_REL_CSSR_1X1: fusion_guided_reconstruction
+    Q3_E2E_ABSREL_CSSR_1X1: fusion_guided_reconstruction
+    Q4_E2E_ABSREL_CSSR_LOCAL3: fusion_guided_reconstruction
+  diagnostic_only_by_method:
+    Q2_E2E_REL_CSSR_1X1: [class_conditional_mls]
+    Q3_E2E_ABSREL_CSSR_1X1: [class_conditional_mls]
+    Q4_E2E_ABSREL_CSSR_LOCAL3: [class_conditional_mls]
+  prohibited:
+    - independent_view_cssr
+    - common_class_cssr
+    - max_view
+    - score_weighting
+    - mls_cssr_linear_combination
+    - learned_score_fusion
+    - top2_class_mixture
+    - learned_rejector
+
+evaluation:
+  report_metrics:
+    - known_accuracy
+    - known_macro_f1
+    - auroc
+    - oscr
+    - fpr95
+    - known_correct_acceptance_rate
+    - unknown_rejection_rate
+    - open_set_harmonic_score
+    - k_plus_1_macro_f1
+  per_pair_identity_context: true
+  absorption_by_known_class: true
+  ddg_bidirectional_absorption: true
+  marvel_cape_reverse_diagnostic: true
+
+pilot_gate:
+  baseline: Q1_CE_FINETUNE_CONTROL
+  frozen_reference: Q0_FROZEN_R2_CC_MLS
+  candidates:
+    - Q2_E2E_REL_CSSR_1X1
+    - Q3_E2E_ABSREL_CSSR_1X1
+    - Q4_E2E_ABSREL_CSSR_LOCAL3
+  minimum_mean_auroc_delta_vs_q1: 0.02
+  minimum_positive_pair_count_vs_q1: 2
+  minimum_mean_oscr_delta_vs_q1: 0.0
+  maximum_mean_kccr_drop_vs_q1: 0.01
+  maximum_mean_fpr95_increase_vs_q1: 0.02
+  minimum_mean_auroc_delta_vs_q0: 0.01
+  minimum_identity_auroc: 0.40
+  minimum_identity_auroc_delta_vs_q1: -0.10
+  replacement_minimum_mean_auroc_gain: 0.02
+  complexity_order:
+    - Q2_E2E_REL_CSSR_1X1
+    - Q3_E2E_ABSREL_CSSR_1X1
+    - Q4_E2E_ABSREL_CSSR_LOCAL3
+  no_candidate_label: cssr_redesign_failed
+  no_candidate_runs_confirmation: false
+
+confirmation_gate:
+  baseline: Q1_CE_FINETUNE_CONTROL
+  frozen_reference: Q0_FROZEN_R2_CC_MLS
+  minimum_mean_auroc_delta_vs_q1: 0.02
+  minimum_positive_pair_count_vs_q1: 3
+  minimum_mean_oscr_delta_vs_q1: 0.0
+  maximum_mean_kccr_drop_vs_q1: 0.01
+  maximum_mean_fpr95_increase_vs_q1: 0.02
+  minimum_mean_auroc_delta_vs_q0: 0.01
+  minimum_identity_auroc: 0.40
+  minimum_identity_auroc_delta_vs_q1: -0.10
+  success_label: cssr_redesign_worth_full_validation
+  failure_label: cssr_redesign_rejected
+
+runtime:
+  formal_device: cuda
+  expected_gpu_model: NVIDIA GeForce RTX 4090
+  maximum_parallel_tasks: 4
+  deterministic_algorithms: true
+  amp: false
+  tf32: false
+  torch_compile: false
+  num_workers: 0
+
+outputs:
+  namespace: artifacts/cssr/fg_mv_cssr_e2e_redesign_v2
+  fail_if_output_nonempty: true
+  save_resolved_config: true
+  save_r2_reference_and_hash: true
+  save_epoch_pair_schedules: true
+  save_schedule_usage_audit: true
+  save_checkpoint: true
+  save_training_and_gradient_log: true
+  save_confidence_diagnostics: true
+  save_reference_distributions: true
+  save_predictions_and_scores: true
+  save_metrics_and_error_analysis: true
+  save_environment_and_hashes: true
+
+decisions:
+  final_unknown_test_authorized: false
+  second_angle_fold_authorized: false
+  extra_seed_authorized: false
+  arpl_authorized: false
+  automatic_followon_method_authorized: false
