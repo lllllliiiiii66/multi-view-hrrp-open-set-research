@@ -14,7 +14,7 @@
 
 ## 2. 冻结 GPU 执行条件
 
-- 代码基线：GPU 兼容提交 `7c90e20adf4a6f19f8f073d87ab12a9252cb28cd`。该提交仅将无参数的 `AdaptiveMaxPool1d(1)` 替换为前向和并列最大值梯度规则均相同的 `torch.max(..., dim=-1, keepdim=True).values`，并增加 CPU 精确等价与 CUDA 确定性测试；模型参数、输出形状和配置不变。
+- 代码基线：GPU 兼容提交 `2ee8f0d6b8f437786677055d4bc73c41891029b9`。其中池化提交 `7c90e20adf4a6f19f8f073d87ab12a9252cb28cd` 仅将无参数的 `AdaptiveMaxPool1d(1)` 替换为前向和并列最大值梯度规则均相同的 `torch.max(..., dim=-1, keepdim=True).values`；后续提交仅为 NumPy 1.x 使用等价的 `np.trapz` 名称回退。两项均有兼容测试；模型参数、输出形状、指标定义和配置不变。
 - 配置：`configs/experiments/arpl/mv_rpformer_surrogate_v1.yaml`，配置 SHA-256 固定为 `66fe6c9fa556f2fcba1a5325163d28268570c243018e7a41be99e051a7c7ec23`。
 - 数据：继续使用原预注册的处理后 HRRP bundle 及其中冻结的三个哈希。
 - development：由于任务源码哈希发生变化，不复用 Merlin 的 CPU development 授权；在同一 GPU 环境从头完整运行 S0–S2 × seed 20260830 × M0–M7 共 24 项，聚合与审计通过后才允许启动 confirmation。
@@ -27,7 +27,7 @@
 
 ## 3. 结果隔离与选择边界
 
-- 首次逐卡 CUDA 预检在正式输出目录创建前触发了 PyTorch 对 `AdaptiveMaxPool1d(1)` 确定性反向传播的阻断，没有产生正式 GPU 结果。上述等价实现修复及重新运行 development 的决定只由该运行时错误触发，不依据性能指标。
+- 首次逐卡 CUDA 预检在正式输出目录创建前触发了 PyTorch 对 `AdaptiveMaxPool1d(1)` 确定性反向传播的阻断；随后全测试发现容器的 CUDA PyTorch 按 NumPy 1.x 构建，而指标代码只使用了 NumPy 2.x 的同一梯形积分新名称。两项均未产生正式 GPU 结果。上述等价兼容修复及重新运行 development 的决定只由运行时错误触发，不依据性能指标。
 - GPU confirmation 使用独立输出与日志目录，从第 1 epoch 完整运行 C0–C3 × 3 seeds × M0–M7，共 96 项。
 - GPU 的完整且审计通过的 96 项被指定为本补充后的正式 confirmation；不得根据 GPU 与 CPU 的性能择优选择结果。
 - Merlin CPU confirmation 继续运行，仅作为独立复核与技术故障保险；不得将两台机器的单元拼接为同一 phase。只有 GPU 发生与性能无关且无法在冻结条件下恢复的技术或完整性失败时，才可由完整 CPU confirmation 替代，并必须记录失败原因。
