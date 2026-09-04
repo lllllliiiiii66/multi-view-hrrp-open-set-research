@@ -69,7 +69,7 @@ def _small_unique_rows() -> list[dict[str, Any]]:
                     "surrogate_unknown",
                     f"{identity}-{local_index}",
                     identity,
-                    -1,
+                    5,
                     len(rows),
                 )
             )

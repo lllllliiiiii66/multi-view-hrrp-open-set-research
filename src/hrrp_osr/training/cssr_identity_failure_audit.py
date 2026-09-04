@@ -745,11 +745,13 @@ def validate_unique_base_rows(
     ]
     surrogate_identities = Counter(str(row["class_name"]) for row in surrogate)
     if (
-        any(int(row["model_label"]) != -1 for row in surrogate)
+        any(int(row["model_label"]) != 5 for row in surrogate)
         or len(surrogate_identities) != 2
         or len(set(surrogate_identities.values())) != 1
     ):
-        raise DataValidationError("surrogate bases are not two balanced unknown identities")
+        raise DataValidationError(
+            "surrogate bases are not two balanced identities with sentinel label 5"
+        )
 
 
 def _json_array(row: Mapping[str, Any], name: str, width: int) -> np.ndarray:
