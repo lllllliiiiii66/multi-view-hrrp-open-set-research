@@ -41,6 +41,7 @@ artifacts/predictions/
 artifacts/results/
 artifacts/logs/
 artifacts/diagnostic/
+artifacts/diagnostics/
 artifacts/amdr/
 artifacts/arpl/mv_rpformer_surrogate_v1/
 checkpoints/
